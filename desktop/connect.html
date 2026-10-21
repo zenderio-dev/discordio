@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'">
+  <title>discordio</title>
+  <style>
+    :root { --bg: #fff3f6; --panel: #fff; --line: #f7c4d2; --text: #3b1f2b; --muted: #a06a80; --accent: #ff4d7d; --accent-2: #e6336a; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #1d1219; --panel: #281a23; --line: #4a2c3d; --text: #ffe9f0; --muted: #c493a8; color-scheme: dark; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, "Segoe UI", sans-serif; padding: 16px; }
+    .card { width: min(400px, 100%); background: var(--panel); border: 2px solid var(--line); border-radius: 22px; padding: 26px; text-align: center; box-shadow: 0 8px 28px #ff4d7d22; }
+    img { width: 120px; height: 120px; }
+    h1 { margin: 4px 0; color: var(--accent); }
+    p { color: var(--muted); }
+    input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--text); font: inherit; outline: none; }
+    input:focus { border-color: var(--accent); }
+    button { margin-top: 12px; width: 100%; padding: 11px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; box-shadow: 0 4px 0 var(--accent-2); }
+    .error { color: #e5484d; min-height: 1.4em; }
+  </style>
+</head>
+<body>
+  <form class="card" id="form">
+    <img src="mascot.svg" alt="">
+    <h1>discordio</h1>
+    <p>Ну и куда подключаемся? Вставь адрес сервера, который скинул друг. Н-не то чтобы мне было интересно.</p>
+    <input id="server" placeholder="https://имя-пк.tailXXXX.ts.net" autofocus required>
+    <div class="error" id="error"></div>
+    <button type="submit">Подключиться</button>
+  </form>
+  <script>
+    const params = new URLSearchParams(location.search);
+    document.getElementById('server').value = params.get('server') || '';
+    document.getElementById('error').textContent = params.get('error') || '';
+    document.getElementById('form').onsubmit = async (e) => {
+      e.preventDefault();
+      const res = await window.discordioDesktop.setServer(document.getElementById('server').value);
+      if (!res.ok) document.getElementById('error').textContent = res.error;
+    };
+  </script>
+</body>
+</html>

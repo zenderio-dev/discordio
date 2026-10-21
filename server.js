@@ -5,6 +5,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import { WebSocketServer } from 'ws';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -13,6 +14,8 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const MAX_PEERS = Number(process.env.MAX_PEERS || 8);
 const HISTORY_SIZE = 200;
+const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
+const RELEASES_URL = process.env.DESKTOP_DOWNLOAD_URL || 'https://github.com/zenderio-dev/discordio/releases/latest';
 
 function iceServers() {
   if (process.env.ICE_SERVERS_JSON) {
@@ -37,6 +40,20 @@ const app = express();
 app.disable('x-powered-by');
 app.get('/config.json', (_req, res) => {
   res.json({ iceServers: iceServers(), maxPeers: MAX_PEERS });
+});
+// Установщик приложения: если положить .exe в папку downloads/, друзья скачают его прямо
+// с твоего сервера по ссылке /download. Иначе отправляем на страницу релизов GitHub.
+app.get('/download', (_req, res) => {
+  let files = [];
+  try {
+    files = fs
+      .readdirSync(DOWNLOADS_DIR)
+      .filter((f) => f.toLowerCase().endsWith('.exe'))
+      .map((f) => ({ f, t: fs.statSync(path.join(DOWNLOADS_DIR, f)).mtimeMs }))
+      .sort((a, b) => b.t - a.t);
+  } catch {}
+  if (files.length) return res.download(path.join(DOWNLOADS_DIR, files[0].f));
+  res.redirect(RELEASES_URL);
 });
 app.use(
   '/vendor/nsup',
@@ -79,7 +96,13 @@ function broadcast(room, msg, exceptId) {
 }
 
 function publicPeer(p) {
-  return { id: p.id, name: p.name, state: p.state };
+  return { id: p.id, name: p.name, avatar: p.avatar, state: p.state };
+}
+
+// Аватарка: маленькая картинка data:URL (клиент сам ужимает до 128x128).
+function cleanAvatar(a) {
+  a = String(a || '');
+  return a.length <= 120_000 && /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(a) ? a : null;
 }
 
 const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 32);
@@ -142,7 +165,9 @@ wss.on('connection', (ws, req) => {
         id: crypto.randomUUID(),
         name,
         ws,
-        state: { muted: false, deafened: false, sharing: false, screenStreamId: null },
+        avatar: cleanAvatar(msg.avatar),
+        lastPoke: 0,
+        state: { muted: false, deafened: false, sharing: false, screenStreamId: null, camera: false, camStreamId: null },
       };
       send(ws, {
         type: 'joined',
@@ -172,6 +197,8 @@ wss.on('connection', (ws, req) => {
           deafened: !!s.deafened,
           sharing: !!s.sharing,
           screenStreamId: s.sharing ? String(s.screenStreamId || '').slice(0, 64) : null,
+          camera: !!s.camera,
+          camStreamId: s.camera ? String(s.camStreamId || '').slice(0, 64) : null,
         };
         broadcast(room, { type: 'state', id: me.id, state: me.state }, me.id);
         break;
@@ -183,6 +210,19 @@ wss.on('connection', (ws, req) => {
         room.history.push(entry);
         if (room.history.length > HISTORY_SIZE) room.history.shift();
         broadcast(room, { type: 'chat', message: entry });
+        break;
+      }
+      case 'profile': {
+        me.avatar = cleanAvatar(msg.avatar);
+        broadcast(room, { type: 'profile', id: me.id, avatar: me.avatar }, me.id);
+        break;
+      }
+      case 'poke': {
+        const target = room.peers.get(msg.to);
+        const now = Date.now();
+        if (!target || now - me.lastPoke < 3000) break;
+        me.lastPoke = now;
+        send(target.ws, { type: 'poke', from: me.id, name: me.name });
         break;
       }
       case 'ping':

@@ -1,6 +1,8 @@
 import { MicPipeline, NS_MODES } from './audio.js';
 
 const $ = (s) => document.querySelector(s);
+// Мост к приложению для Windows (есть только внутри Electron).
+const desktop = window.discordioDesktop || null;
 
 // ---------- Иконки ----------
 const svg = (d) =>
@@ -10,15 +12,46 @@ const ICONS = {
   micOff: svg('<path d="M15 9.3V5a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.9 2.3M5 10a7 7 0 0 0 11.7 5.2M19 10a7 7 0 0 1-.6 2.8M12 17v4M8 21h8M3 3l18 18"/>'),
   head: svg('<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/>'),
   headOff: svg('<path d="M3 18v-6a9 9 0 0 1 15.4-6.4M21 12v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3zM3 3l18 18"/>'),
+  cam: svg('<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>'),
+  camOff: svg('<path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5 0h4a2 2 0 0 1 2 2v3.3l1 1L23 7v10M1 1l22 22"/>'),
   screen: svg('<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
   leave: svg('<path d="M10.7 13.3a16 16 0 0 0 3.4 2.6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.4 2.1L8 9.6M22 2 2 22"/>'),
+  speaker: svg('<path d="M11 5 6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7"/>'),
+  speakerOff: svg('<path d="M11 5 6 9H2v6h4l5 4V5zM22 9l-6 6M16 9l6 6"/>'),
+};
+
+// ---------- Цундере-фразы ----------
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const SAY = {
+  greet: [
+    'Ч-чего уставился? Заходи уже, раз пришёл!',
+    'Н-не то чтобы я тебя ждала, бака!',
+    'Опять ты? ...Ладно, проходи.',
+    'Пароль не забудь, дурак!',
+    'Хмф. Друзья уже ждут. Не я, а друзья!',
+  ],
+  joined: (n) => pick([`${n} пришёл. Хмф, не то чтобы кто-то ждал!`, `${n} всё-таки явился. Наконец-то... то есть, ой, неважно!`, `${n} тут. Ну привет, раз так.`]),
+  left: (n) => pick([`${n} ушёл. Ну и пусть! Мне всё равно... правда!`, `${n} сбежал. Б-бака...`, `${n} вышел. Не очень-то и хотелось.`]),
+  first: 'Ты первый в комнате. Скинь друзьям ссылку и пароль, а то так и будешь сидеть один.',
+  mutedTalking: 'Эй! Ты говоришь, а микрофон выключен. Бака!',
+  pokedBy: (n) => `${n} тыкнул тебя! Хмф, внимания захотелось?`,
+  poked: (n) => `Ты тыкнул ${n}. Доволен?`,
+  copied: 'Ссылку скопировала. Н-не ради тебя, а ради друзей! Пароль скажи сам.',
+  reconnecting: 'Связь пропала... Н-не уходи, переподключаюсь!',
+  reconnected: 'Вернулись. Я не волновалась, если что.',
+};
+const ERRORS = {
+  'wrong-password': 'Неверный пароль, бака! Попробуй ещё раз.',
+  full: 'Тут уже полно народу! Подожди, нетерпеливый.',
+  'rate-limit': 'Слишком много попыток! Остынь минутку.',
 };
 
 // ---------- Настройки ----------
 const DEFAULTS = {
   inputDeviceId: '',
   outputDeviceId: '',
+  cameraDeviceId: '',
   inputVolume: 100,
   nsMode: 'rnnoise',
   echoCancellation: true,
@@ -29,6 +62,8 @@ const DEFAULTS = {
   pttKey: 'KeyV',
   pttReleaseMs: 200,
   screenQuality: '720p30',
+  notify: true,
+  sounds: true,
 };
 const store = {
   get(key, def) {
@@ -48,12 +83,16 @@ const store = {
 const settings = { ...DEFAULTS, ...store.get('settings', {}) };
 if (!(settings.nsMode in NS_MODES)) settings.nsMode = DEFAULTS.nsMode;
 const peerVolumes = store.get('volumes', {}); // по имени участника
+const peerMuted = store.get('mutedPeers', {}); // заглушённые «для себя», по имени
+let myAvatar = store.get('avatar', null);
 
 const SCREEN_PRESETS = {
   '720p30': { width: 1280, height: 720, frameRate: 30, bitrate: 1_500_000, hint: 'detail' },
   '1080p30': { width: 1920, height: 1080, frameRate: 30, bitrate: 3_000_000, hint: 'detail' },
   '1080p60': { width: 1920, height: 1080, frameRate: 60, bitrate: 6_000_000, hint: 'motion' },
 };
+// Камера намеренно скромная: 360p и 24 к/с почти не грузят ни сеть, ни процессор.
+const CAMERA = { width: 640, height: 360, frameRate: 24, bitrate: 450_000 };
 
 // ---------- Состояние ----------
 let config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -63,7 +102,15 @@ let myId = null;
 let joinInfo = null; // {room, name, password}
 let leaving = false;
 let reconnectDelay = 1000;
-const local = { muted: false, deafened: false, sharing: false, screenStream: null, speaking: false };
+const local = {
+  muted: false,
+  deafened: false,
+  sharing: false,
+  screenStream: null,
+  camera: false,
+  camStream: null,
+  speaking: false,
+};
 const peers = new Map();
 let pttDown = false;
 let unread = 0;
@@ -72,7 +119,18 @@ let unread = 0;
 function colorFor(name) {
   let h = 0;
   for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
-  return `hsl(${h} 55% 45%)`;
+  return `hsl(${h} 70% 62%)`;
+}
+function paintAvatar(el, name, avatar) {
+  if (avatar) {
+    el.style.backgroundImage = `url("${avatar}")`;
+    el.style.backgroundColor = 'transparent';
+    el.textContent = '';
+  } else {
+    el.style.backgroundImage = '';
+    el.style.backgroundColor = colorFor(name || '?');
+    el.textContent = [...(name || '?')][0].toUpperCase();
+  }
 }
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -88,17 +146,36 @@ function keyLabel(code) {
 function saveSettings() {
   store.set('settings', settings);
 }
-function showBanner(text) {
-  const b = $('#banner');
-  b.textContent = text || '';
-  b.hidden = !text;
+function sound(freqs, dur, vol) {
+  if (settings.sounds) mic?.beep(freqs, dur, vol);
 }
-let toastTimer;
+function toast(text, ms = 5000) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = '<img src="/img/mascot.svg" alt="">';
+  el.append(text);
+  $('#toasts').append(el);
+  setTimeout(() => el.remove(), ms);
+}
 function warn(text) {
-  showBanner(text);
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => showBanner(''), 6000);
+  toast(text, 7000);
   addSystemMessage(text);
+}
+
+// Уменьшаем картинку до 128x128 (обрезка по центру), чтобы аватарка весила ~10 КБ.
+async function resizeAvatar(file) {
+  const bitmap = await createImageBitmap(file);
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const side = Math.min(bitmap.width, bitmap.height);
+  canvas
+    .getContext('2d')
+    .drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, size, size);
+  bitmap.close();
+  let url = canvas.toDataURL('image/webp', 0.85);
+  if (!url.startsWith('data:image/webp')) url = canvas.toDataURL('image/jpeg', 0.85);
+  return url;
 }
 
 // ---------- Микрофон ----------
@@ -115,18 +192,29 @@ async function ensureMic() {
   return mic;
 }
 
-function onLevel({ level, open }) {
-  // Индикатор в настройках: шкала от -80 до 0 дБ.
-  const pct = Math.max(0, Math.min(100, ((level + 80) / 80) * 100));
-  for (const id of ['#s-meter-fill', '#s-meter-fill-ptt']) {
-    const el = $(id);
-    el.style.width = pct + '%';
-    el.classList.toggle('open', open);
+let loudMutedTimer = null;
+let lastMutedHint = 0;
+function onLevel({ level, open, loudMuted }) {
+  if ($('#settings').open) {
+    // Индикатор в настройках: шкала от -80 до 0 дБ.
+    const pct = Math.max(0, Math.min(100, ((level + 80) / 80) * 100));
+    for (const id of ['#s-meter-fill', '#s-meter-fill-ptt']) {
+      const el = $(id);
+      el.style.width = pct + '%';
+      el.classList.toggle('open', open);
+    }
   }
   if (open !== local.speaking) {
     local.speaking = open;
-    const tile = document.querySelector('.tile.self');
-    tile?.classList.toggle('speaking', open);
+    document.querySelector('.tile.self')?.classList.toggle('speaking', open);
+  }
+  // Подсказка «ты в муте», если человек говорит дольше секунды.
+  clearTimeout(loudMutedTimer);
+  if (loudMuted && myId && local.muted && !local.deafened && Date.now() - lastMutedHint > 30000) {
+    loudMutedTimer = setTimeout(() => {
+      lastMutedHint = Date.now();
+      toast(SAY.mutedTalking);
+    }, 1000);
   }
 }
 
@@ -140,7 +228,7 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.onopen = () => {
     reconnectDelay = 1000;
-    ws.send(JSON.stringify({ type: 'join', ...joinInfo }));
+    ws.send(JSON.stringify({ type: 'join', ...joinInfo, avatar: myAvatar }));
   };
   ws.onmessage = (e) => handleServer(JSON.parse(e.data));
   ws.onclose = () => {
@@ -148,7 +236,7 @@ function connect() {
     // Потеряли сервер: сбрасываем соединения и входим заново.
     myId = null;
     for (const id of [...peers.keys()]) removePeer(id, true);
-    showBanner('Нет связи с сервером, переподключаюсь…');
+    toast(SAY.reconnecting);
     setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, 10000);
   };
@@ -166,6 +254,8 @@ function sendState() {
       deafened: local.deafened,
       sharing: local.sharing,
       screenStreamId: local.screenStream?.id || null,
+      camera: local.camera,
+      camStreamId: local.camStream?.id || null,
     },
   });
 }
@@ -178,38 +268,44 @@ async function handleServer(msg) {
           leaving = true;
           ws.close();
         }
-        backToJoin(msg.message);
+        backToJoin(ERRORS[msg.code] || msg.message);
       }
       break;
     case 'joined': {
       const firstJoin = $('#room').hidden;
       myId = msg.id;
-      showBanner('');
       if (firstJoin) {
         enterRoomUi(msg.room);
         $('#messages').innerHTML = '';
         msg.history.forEach(addChatMessage);
-        addSystemMessage(msg.peers.length ? `В комнате: ${msg.peers.map((p) => p.name).join(', ')}` : 'Ты первый в комнате. Скинь друзьям ссылку и пароль.');
+        addSystemMessage(msg.peers.length ? `В комнате: ${msg.peers.map((p) => p.name).join(', ')}` : SAY.first);
+        if (settings.notify && 'Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
       } else {
-        addSystemMessage('Переподключились');
+        toast(SAY.reconnected);
       }
       renderSelfTile();
       sendState();
-      for (const p of msg.peers) createPeer(p);
+      // Новичок ждёт предложения от тех, кто уже в комнате: так обе стороны не шлют offer одновременно.
+      for (const p of msg.peers) createPeer(p, true);
+      updateAlone();
       break;
     }
     case 'peer-joined':
       createPeer(msg.peer);
-      addSystemMessage(`${msg.peer.name} зашёл`);
-      mic?.beep([660, 880]);
+      addSystemMessage(SAY.joined(msg.peer.name));
+      sound([660, 880]);
+      updateAlone();
       break;
     case 'peer-left': {
       const p = peers.get(msg.id);
       if (p) {
-        addSystemMessage(`${p.name} вышел`);
-        mic?.beep([880, 660]);
+        addSystemMessage(SAY.left(p.name));
+        sound([880, 660]);
       }
       removePeer(msg.id);
+      updateAlone();
       break;
     }
     case 'state': {
@@ -217,12 +313,28 @@ async function handleServer(msg) {
       if (!p) break;
       p.state = msg.state;
       updateTile(p);
+      renderPeerVideo(p);
       renderStage();
       break;
     }
-    case 'signal':
-      await onSignal(msg.from, msg.data);
+    case 'profile': {
+      const p = peers.get(msg.id);
+      if (!p) break;
+      p.avatar = msg.avatar;
+      paintAvatar(p.tile.querySelector('.avatar'), p.name, p.avatar);
       break;
+    }
+    case 'poke':
+      toast(SAY.pokedBy(msg.name));
+      sound([1200, 900, 1200], 0.07, 0.1);
+      desktop?.flash();
+      break;
+    case 'signal': {
+      // Сигналы одного участника обрабатываем строго по очереди.
+      const p = peers.get(msg.from);
+      if (p) p.signalQueue = p.signalQueue.then(() => onSignal(msg.from, msg.data));
+      break;
+    }
     case 'chat':
       addChatMessage(msg.message);
       if (msg.message.from !== myId) {
@@ -231,18 +343,32 @@ async function handleServer(msg) {
           $('#unread').textContent = unread;
           $('#unread').hidden = false;
         }
+        notifyMessage(msg.message);
       }
       break;
   }
 }
 
+function notifyMessage(m) {
+  if (!settings.notify || (document.hasFocus() && !document.hidden)) return;
+  desktop?.flash();
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const avatar = [...peers.values()].find((p) => p.id === m.from)?.avatar;
+  const n = new Notification(m.name, { body: m.text.slice(0, 200), icon: avatar || '/img/icon.svg', silent: !settings.sounds });
+  n.onclick = () => {
+    window.focus();
+    n.close();
+  };
+}
+
 // ---------- WebRTC (perfect negotiation) ----------
-function createPeer(info) {
+function createPeer(info, waitForOffer = false) {
   if (peers.has(info.id)) return peers.get(info.id);
   const pc = new RTCPeerConnection({ iceServers: config.iceServers });
   const peer = {
     id: info.id,
     name: info.name,
+    avatar: info.avatar || null,
     state: info.state || {},
     pc,
     polite: myId < info.id,
@@ -250,15 +376,23 @@ function createPeer(info) {
     ignoreOffer: false,
     audioEls: new Map(),
     micTrack: null,
-    screenStream: null,
+    videoStreams: new Set(),
     screenSenders: [],
+    camSenders: [],
     rtt: null,
     tile: null,
+    pendingCandidates: [],
+    signalQueue: Promise.resolve(),
+    watchdog: null,
   };
   peers.set(info.id, peer);
+  // Страховка: если соединение так и не поднялось, «невежливая» сторона перезапускает ICE.
+  peer.watchdog = setInterval(() => {
+    if (!peer.polite && !peer.waitingOffer && ['new', 'failed'].includes(pc.connectionState) && pc.signalingState === 'stable') pc.restartIce();
+  }, 8000);
 
-  pc.addTrack(mic.track, mic.stream);
-  if (local.sharing && local.screenStream) addScreenTracks(peer);
+  peer.waitingOffer = waitForOffer;
+  if (!waitForOffer) addLocalTracks(peer);
 
   pc.onnegotiationneeded = async () => {
     try {
@@ -282,15 +416,18 @@ function createPeer(info) {
   pc.ontrack = ({ track, streams }) => {
     const stream = streams[0] || new MediaStream([track]);
     if (track.kind === 'video') {
-      peer.screenStream = stream;
+      peer.videoStreams.add(stream);
       stream.addEventListener('removetrack', () => {
-        if (!stream.getVideoTracks().length && peer.screenStream === stream) peer.screenStream = null;
+        if (!stream.getVideoTracks().length) peer.videoStreams.delete(stream);
+        renderPeerVideo(peer);
         renderStage();
       });
+      renderPeerVideo(peer);
       renderStage();
       return;
     }
-    if (stream.id !== peer.state.screenStreamId && !stream.getVideoTracks().length) peer.micTrack = track;
+    const isMic = stream.id !== peer.state.screenStreamId && stream.id !== peer.state.camStreamId && !stream.getVideoTracks().length;
+    if (isMic) peer.micTrack = track;
     attachAudio(peer, stream);
   };
 
@@ -309,11 +446,22 @@ async function onSignal(from, data) {
       peer.ignoreOffer = !peer.polite && collision;
       if (peer.ignoreOffer) return;
       await pc.setRemoteDescription(desc);
+      // Кандидаты, пришедшие раньше описания, применяем теперь.
+      for (const c of peer.pendingCandidates.splice(0)) pc.addIceCandidate(c).catch(() => {});
       if (desc.type === 'offer') {
+        if (peer.waitingOffer) {
+          // Треки встают в уже предложенные слоты, поэтому ответ сразу их содержит.
+          peer.waitingOffer = false;
+          addLocalTracks(peer);
+        }
         await pc.setLocalDescription();
         sendWs({ type: 'signal', to: from, data: { description: pc.localDescription } });
       }
     } else if (data.candidate) {
+      if (!pc.remoteDescription) {
+        peer.pendingCandidates.push(data.candidate);
+        return;
+      }
       try {
         await pc.addIceCandidate(data.candidate);
       } catch (e) {
@@ -326,18 +474,26 @@ async function onSignal(from, data) {
 }
 
 async function tuneSenders(peer) {
+  const camTrack = local.camStream?.getVideoTracks()[0];
   for (const sender of peer.pc.getSenders()) {
     if (!sender.track) continue;
     const params = sender.getParameters();
     if (!params.encodings?.length) continue;
+    const enc = params.encodings[0];
     if (sender.track.kind === 'audio') {
-      params.encodings[0].maxBitrate = 96_000;
-      params.encodings[0].priority = 'high';
-      params.encodings[0].networkPriority = 'high';
+      enc.maxBitrate = sender.track === mic.track ? 64_000 : 128_000;
+      if (sender.track === mic.track) {
+        enc.priority = 'high';
+        enc.networkPriority = 'high';
+      }
+    } else if (sender.track === camTrack) {
+      enc.maxBitrate = CAMERA.bitrate;
+      enc.maxFramerate = CAMERA.frameRate;
+      params.degradationPreference = 'balanced';
     } else {
       const preset = SCREEN_PRESETS[settings.screenQuality];
-      params.encodings[0].maxBitrate = preset.bitrate;
-      params.encodings[0].maxFramerate = preset.frameRate;
+      enc.maxBitrate = preset.bitrate;
+      enc.maxFramerate = preset.frameRate;
       params.degradationPreference = preset.hint === 'motion' ? 'maintain-framerate' : 'maintain-resolution';
     }
     try {
@@ -348,16 +504,22 @@ async function tuneSenders(peer) {
   }
 }
 
+function applyPeerAudio(peer) {
+  for (const el of peer.audioEls.values()) {
+    el.volume = (peerVolumes[peer.name] ?? 100) / 100;
+    el.muted = local.deafened || !!peerMuted[peer.name];
+  }
+}
+
 function attachAudio(peer, stream) {
   if (peer.audioEls.has(stream.id)) return;
   const el = new Audio();
   el.autoplay = true;
   el.srcObject = stream;
-  el.volume = (peerVolumes[peer.name] ?? 100) / 100;
-  el.muted = local.deafened;
   if (settings.outputDeviceId && el.setSinkId) el.setSinkId(settings.outputDeviceId).catch(() => {});
-  el.play().catch(() => {});
   peer.audioEls.set(stream.id, el);
+  applyPeerAudio(peer);
+  el.play().catch(() => {});
   stream.addEventListener('removetrack', () => {
     if (!stream.getAudioTracks().length) {
       el.srcObject = null;
@@ -369,6 +531,7 @@ function attachAudio(peer, stream) {
 function removePeer(id, silent) {
   const peer = peers.get(id);
   if (!peer) return;
+  clearInterval(peer.watchdog);
   peer.pc.close();
   for (const el of peer.audioEls.values()) el.srcObject = null;
   peer.tile?.remove();
@@ -376,11 +539,59 @@ function removePeer(id, silent) {
   if (!silent) renderStage();
 }
 
-// ---------- Демонстрация экрана ----------
-function addScreenTracks(peer) {
-  for (const track of local.screenStream.getTracks()) {
-    peer.screenSenders.push(peer.pc.addTrack(track, local.screenStream));
+function addLocalTracks(peer) {
+  peer.pc.addTrack(mic.track, mic.stream);
+  if (local.sharing && local.screenStream) peer.screenSenders = addTracks(peer, local.screenStream);
+  if (local.camera && local.camStream) peer.camSenders = addTracks(peer, local.camStream);
+}
+
+// ---------- Камера и демонстрация экрана ----------
+function addTracks(peer, stream) {
+  return stream.getTracks().map((track) => peer.pc.addTrack(track, stream));
+}
+function removeSenders(peer, senders) {
+  for (const s of senders) {
+    try {
+      peer.pc.removeTrack(s);
+    } catch {}
   }
+}
+
+async function startCamera() {
+  const video = { width: { ideal: CAMERA.width }, height: { ideal: CAMERA.height }, frameRate: { ideal: CAMERA.frameRate } };
+  if (settings.cameraDeviceId) video.deviceId = { exact: settings.cameraDeviceId };
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video });
+  } catch (e) {
+    return warn(e.name === 'NotAllowedError' ? 'Нет доступа к камере. Разреши её в настройках.' : 'Камера не включилась: ' + e.message);
+  }
+  stream.getVideoTracks()[0].contentHint = 'motion';
+  stream.getVideoTracks()[0].addEventListener('ended', stopCamera);
+  local.camStream = stream;
+  local.camera = true;
+  sendState(); // сначала id потока, чтобы друзья знали, что это камера, а не экран
+  for (const peer of peers.values()) {
+    if (peer.waitingOffer) continue; // получит камеру вместе с остальными треками
+    peer.camSenders = addTracks(peer, stream);
+    setTimeout(() => tuneSenders(peer), 1500);
+  }
+  updateControls();
+  renderSelfVideo();
+}
+
+function stopCamera() {
+  if (!local.camera) return;
+  for (const peer of peers.values()) {
+    removeSenders(peer, peer.camSenders);
+    peer.camSenders = [];
+  }
+  local.camStream.getTracks().forEach((t) => t.stop());
+  local.camStream = null;
+  local.camera = false;
+  sendState();
+  updateControls();
+  renderSelfVideo();
 }
 
 async function startShare() {
@@ -394,7 +605,7 @@ async function startShare() {
       selfBrowserSurface: 'exclude',
     });
   } catch (e) {
-    if (e.name !== 'NotAllowedError') warn('Не удалось начать демонстрацию: ' + e.message);
+    if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') warn('Не удалось начать демонстрацию: ' + e.message);
     return;
   }
   const video = stream.getVideoTracks()[0];
@@ -402,9 +613,10 @@ async function startShare() {
   video.addEventListener('ended', stopShare);
   local.screenStream = stream;
   local.sharing = true;
-  sendState(); // сначала сообщаем id потока, чтобы друзья не приняли звук экрана за микрофон
+  sendState();
   for (const peer of peers.values()) {
-    addScreenTracks(peer);
+    if (peer.waitingOffer) continue;
+    peer.screenSenders = addTracks(peer, stream);
     setTimeout(() => tuneSenders(peer), 1500);
   }
   updateControls();
@@ -414,11 +626,7 @@ async function startShare() {
 function stopShare() {
   if (!local.sharing) return;
   for (const peer of peers.values()) {
-    for (const s of peer.screenSenders) {
-      try {
-        peer.pc.removeTrack(s);
-      } catch {}
-    }
+    removeSenders(peer, peer.screenSenders);
     peer.screenSenders = [];
   }
   local.screenStream.getTracks().forEach((t) => t.stop());
@@ -429,14 +637,50 @@ function stopShare() {
   renderStage();
 }
 
+// Видеопотоки участника: камера — тот, что объявлен как camStreamId, остальное — экран.
+function peerCamStream(peer) {
+  if (!peer.state.camera) return null;
+  for (const s of peer.videoStreams) if (s.id === peer.state.camStreamId && s.getVideoTracks().length) return s;
+  return null;
+}
+function peerScreenStream(peer) {
+  if (!peer.state.sharing) return null;
+  for (const s of peer.videoStreams) if (s.id !== peer.state.camStreamId && s.getVideoTracks().length) return s;
+  return null;
+}
+
+function setTileVideo(tile, stream) {
+  const media = tile.querySelector('.tile-media');
+  let video = media.querySelector('video');
+  if (stream) {
+    if (!video) {
+      video = document.createElement('video');
+      video.autoplay = video.playsInline = video.muted = true;
+      media.append(video);
+    }
+    if (video.srcObject !== stream) video.srcObject = stream;
+  } else if (video) {
+    video.srcObject = null;
+    video.remove();
+  }
+  tile.querySelector('.avatar').hidden = !!stream;
+  tile.classList.toggle('has-video', !!stream);
+}
+function renderPeerVideo(peer) {
+  if (peer.tile) setTileVideo(peer.tile, peerCamStream(peer));
+}
+function renderSelfVideo() {
+  const tile = document.querySelector('.tile.self');
+  if (tile) setTileVideo(tile, local.camStream);
+}
+
 function renderStage() {
   const stage = $('#stage');
   const views = [];
-  if (local.sharing && local.screenStream) views.push({ key: 'self', name: 'Твой экран', stream: local.screenStream, self: true });
+  if (local.sharing && local.screenStream) views.push({ key: 'self', name: 'Твой экран', stream: local.screenStream });
   for (const p of peers.values()) {
-    if (p.state.sharing && p.screenStream && p.screenStream.getVideoTracks().length) {
-      views.push({ key: p.id, name: `Экран: ${p.name}`, stream: p.screenStream });
-    }
+    const s = peerScreenStream(p);
+    if (s) views.push({ key: p.id, name: `Экран: ${p.name}`, stream: s });
   }
   const existing = new Map([...stage.children].map((el) => [el.dataset.key, el]));
   for (const v of views) {
@@ -445,10 +689,9 @@ function renderStage() {
       el = document.createElement('div');
       el.className = 'screen-view';
       el.dataset.key = v.key;
-      el.innerHTML = `<video autoplay playsinline muted></video><span class="label"></span><button class="fs">⛶</button>`;
-      const video = el.querySelector('video');
+      el.innerHTML = `<video autoplay playsinline muted></video><span class="label"></span><button class="fs" title="На весь экран">⛶</button>`;
       el.querySelector('.fs').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen());
-      video.ondblclick = () => el.requestFullscreen();
+      el.querySelector('video').ondblclick = () => el.requestFullscreen();
       stage.append(el);
     }
     const video = el.querySelector('video');
@@ -456,28 +699,29 @@ function renderStage() {
     el.querySelector('.label').textContent = v.name;
     existing.delete(v.key);
   }
-  for (const el of existing.values()) el.remove();
+  for (const el of existing.values()) {
+    el.querySelector('video').srcObject = null;
+    el.remove();
+  }
   stage.hidden = views.length === 0;
 }
 
 // ---------- Плитки участников ----------
-function makeTile(name) {
+function makeTile(name, avatar) {
   const tile = $('#tile-tpl').content.firstElementChild.cloneNode(true);
-  const avatar = tile.querySelector('.avatar');
-  avatar.textContent = [...name][0]?.toUpperCase() || '?';
-  avatar.style.background = colorFor(name);
+  paintAvatar(tile.querySelector('.avatar'), name, avatar);
   tile.querySelector('.tile-name').textContent = name;
   return tile;
 }
 
 function renderSelfTile() {
   document.querySelector('.tile.self')?.remove();
-  const tile = makeTile(joinInfo.name + ' (ты)');
-  tile.querySelector('.avatar').style.background = colorFor(joinInfo.name);
-  tile.querySelector('.avatar').textContent = [...joinInfo.name][0]?.toUpperCase();
+  const tile = makeTile(joinInfo.name, myAvatar);
+  tile.querySelector('.tile-name').textContent = joinInfo.name + ' (ты)';
   tile.classList.add('self');
   $('#tiles').prepend(tile);
   updateSelfTile();
+  renderSelfVideo();
 }
 
 function updateSelfTile() {
@@ -488,7 +732,7 @@ function updateSelfTile() {
 }
 
 function renderPeerTile(peer) {
-  const tile = makeTile(peer.name);
+  const tile = makeTile(peer.name, peer.avatar);
   const slider = tile.querySelector('input');
   slider.value = peerVolumes[peer.name] ?? 100;
   slider.title = `Громкость: ${slider.value}%`;
@@ -497,33 +741,60 @@ function renderPeerTile(peer) {
     peerVolumes[peer.name] = v;
     store.set('volumes', peerVolumes);
     slider.title = `Громкость: ${v}%`;
-    for (const el of peer.audioEls.values()) el.volume = v / 100;
+    applyPeerAudio(peer);
+  };
+  tile.querySelector('.mute-for-me').onclick = () => {
+    if (peerMuted[peer.name]) delete peerMuted[peer.name];
+    else peerMuted[peer.name] = true;
+    store.set('mutedPeers', peerMuted);
+    applyPeerAudio(peer);
+    updateTile(peer);
+  };
+  tile.querySelector('.poke').onclick = () => {
+    sendWs({ type: 'poke', to: peer.id });
+    toast(SAY.poked(peer.name), 3000);
   };
   peer.tile = tile;
   $('#tiles').append(tile);
   updateTile(peer);
+  renderPeerVideo(peer);
 }
 
 function updateTile(peer) {
   const tile = peer.tile;
   if (!tile) return;
   const s = peer.state;
-  tile.querySelector('.tile-icons').innerHTML = (s.muted || s.deafened ? ICONS.micOff : '') + (s.deafened ? ICONS.headOff : '');
+  const mutedForMe = !!peerMuted[peer.name];
+  tile.querySelector('.tile-icons').innerHTML =
+    (s.muted || s.deafened ? ICONS.micOff : '') +
+    (s.deafened ? ICONS.headOff : '') +
+    (mutedForMe ? `<span class="mine" title="Заглушён для тебя">${ICONS.speakerOff}</span>` : '');
+  const muteBtn = tile.querySelector('.mute-for-me');
+  muteBtn.innerHTML = mutedForMe ? ICONS.speakerOff : ICONS.speaker;
+  muteBtn.classList.toggle('active', mutedForMe);
+  muteBtn.title = mutedForMe ? 'Снова слышать' : 'Заглушить для себя';
+  tile.classList.toggle('local-muted', mutedForMe);
   const cs = peer.pc.connectionState;
   tile.classList.toggle('connecting', cs !== 'connected');
   tile.querySelector('.tile-ping').textContent =
     cs === 'connected' ? (peer.rtt != null ? `${peer.rtt} мс` : '') : cs === 'failed' ? 'нет связи' : 'соединяю…';
 }
 
-// Кто говорит и пинг: опрашиваем статистику WebRTC.
+function updateAlone() {
+  $('#alone').hidden = peers.size > 0 || !myId;
+}
+
+// Кто говорит и пинг. Пока окно свёрнуто, не опрашиваем — экономим процессор.
 setInterval(() => {
+  if (document.hidden) return;
   for (const peer of peers.values()) {
     const receiver = peer.pc.getReceivers().find((r) => r.track === peer.micTrack);
     const level = receiver?.getSynchronizationSources?.()[0]?.audioLevel ?? 0;
-    peer.tile?.classList.toggle('speaking', level > 0.015 && !peer.state.muted);
+    peer.tile?.classList.toggle('speaking', level > 0.015 && !peer.state.muted && !peerMuted[peer.name]);
   }
-}, 150);
+}, 200);
 setInterval(async () => {
+  if (document.hidden) return;
   for (const peer of peers.values()) {
     if (peer.pc.connectionState !== 'connected') continue;
     try {
@@ -536,7 +807,7 @@ setInterval(async () => {
       updateTile(peer);
     } catch {}
   }
-}, 2000);
+}, 3000);
 
 // ---------- Чат ----------
 function chatHidden() {
@@ -549,7 +820,9 @@ function addChatMessage(m) {
   const el = document.createElement('div');
   el.className = 'msg';
   const time = new Date(m.ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  el.innerHTML = `<div class="meta"><b>${escapeHtml(m.name)}</b>${time}</div><div class="text">${linkify(m.text)}</div>`;
+  el.innerHTML = `<div class="avatar"></div><div class="msg-body"><div class="meta"><b>${escapeHtml(m.name)}</b>${time}</div><div class="text">${linkify(m.text)}</div></div>`;
+  const avatar = m.from === myId ? myAvatar : peers.get(m.from)?.avatar;
+  paintAvatar(el.querySelector('.avatar'), m.name, avatar);
   box.append(el);
   if (atBottom || m.from === myId) box.scrollTop = box.scrollHeight;
 }
@@ -600,6 +873,10 @@ function updateControls() {
   const deaf = $('#btn-deafen');
   deaf.innerHTML = local.deafened ? ICONS.headOff : ICONS.head;
   deaf.classList.toggle('off', local.deafened);
+  const cam = $('#btn-cam');
+  cam.innerHTML = local.camera ? ICONS.cam : ICONS.camOff;
+  cam.classList.toggle('on', local.camera);
+  cam.title = local.camera ? 'Выключить камеру' : 'Включить камеру';
   const share = $('#btn-share');
   share.innerHTML = ICONS.screen;
   share.classList.toggle('on', local.sharing);
@@ -619,16 +896,16 @@ function toggleMute() {
     local.muted = !local.muted;
   }
   applyDeafen();
-  mic?.beep(local.muted ? [500] : [800], 0.07);
+  sound(local.muted ? [500] : [800], 0.07);
 }
 function toggleDeafen() {
   local.deafened = !local.deafened;
   if (!local.deafened) local.muted = false;
   applyDeafen();
-  mic?.beep(local.deafened ? [500, 400] : [400, 500], 0.07);
+  sound(local.deafened ? [500, 400] : [400, 500], 0.07);
 }
 function applyDeafen() {
-  for (const p of peers.values()) for (const el of p.audioEls.values()) el.muted = local.deafened;
+  for (const p of peers.values()) applyPeerAudio(p);
   updateGate();
   updateControls();
   sendState();
@@ -636,6 +913,7 @@ function applyDeafen() {
 
 $('#btn-mic').onclick = toggleMute;
 $('#btn-deafen').onclick = toggleDeafen;
+$('#btn-cam').onclick = () => (local.camera ? stopCamera() : startCamera());
 $('#btn-share').onclick = () => (local.sharing ? stopShare() : startShare());
 $('#btn-settings').onclick = openSettings;
 $('#btn-leave').onclick = leave;
@@ -643,13 +921,14 @@ $('#copy-link').onclick = async () => {
   const url = `${location.origin}/#${joinInfo.room}`;
   try {
     await navigator.clipboard.writeText(url);
-    addSystemMessage(`Ссылка скопирована: ${url} (пароль скажи отдельно)`);
+    toast(SAY.copied);
+    addSystemMessage(`Ссылка: ${url}`);
   } catch {
     prompt('Ссылка на комнату:', url);
   }
 };
 
-// Push-to-talk: клавиатура, кнопки мыши и экранная кнопка.
+// Push-to-talk: клавиатура, кнопки мыши, экранная кнопка и глобальная клавиша в приложении.
 function setPtt(down) {
   if (pttDown === down) return;
   pttDown = down;
@@ -682,7 +961,10 @@ document.addEventListener('mousedown', (e) => {
 document.addEventListener('mouseup', (e) => {
   if (settings.mode === 'ptt' && `Mouse${e.button}` === settings.pttKey) setPtt(false);
 });
-window.addEventListener('blur', () => setPtt(false));
+// В браузере отпускаем при потере фокуса (иначе keyup не придёт). В приложении клавиша глобальная.
+window.addEventListener('blur', () => {
+  if (!desktop) setPtt(false);
+});
 const pttBtn = $('#btn-ptt');
 pttBtn.addEventListener('pointerdown', (e) => {
   pttBtn.setPointerCapture(e.pointerId);
@@ -691,24 +973,31 @@ pttBtn.addEventListener('pointerdown', (e) => {
 pttBtn.addEventListener('pointerup', () => setPtt(false));
 pttBtn.addEventListener('pointercancel', () => setPtt(false));
 
+function syncDesktopPtt() {
+  desktop?.setPttKey(settings.mode === 'ptt' ? settings.pttKey : null);
+}
+desktop?.onPtt((down) => {
+  if (settings.mode === 'ptt' && !bindingKey) setPtt(down);
+});
+
 // ---------- Окно настроек ----------
 let testEl = null;
 
 async function refreshDevices() {
   const devices = await navigator.mediaDevices.enumerateDevices();
-  const fill = (sel, kind, current) => {
+  const fill = (sel, kind, current, fallback) => {
     const list = devices.filter((d) => d.kind === kind && d.deviceId !== 'communications');
     sel.innerHTML = '';
     for (const d of list) {
-      const opt = new Option(d.label || (kind === 'audioinput' ? 'Микрофон' : 'Динамики'), d.deviceId === 'default' ? '' : d.deviceId);
-      sel.append(opt);
+      sel.append(new Option(d.label || fallback, d.deviceId === 'default' ? '' : d.deviceId));
     }
     if (!list.some((d) => d.deviceId === 'default')) sel.prepend(new Option('По умолчанию', ''));
     sel.value = current;
     if (sel.value !== current) sel.value = '';
   };
-  fill($('#s-input'), 'audioinput', settings.inputDeviceId);
-  fill($('#s-output'), 'audiooutput', settings.outputDeviceId);
+  fill($('#s-input'), 'audioinput', settings.inputDeviceId, 'Микрофон');
+  fill($('#s-output'), 'audiooutput', settings.outputDeviceId, 'Динамики');
+  fill($('#s-camera'), 'videoinput', settings.cameraDeviceId, 'Камера');
   const canSink = 'setSinkId' in HTMLMediaElement.prototype;
   $('#s-output').disabled = !canSink;
   $('#s-output-note').hidden = canSink;
@@ -734,8 +1023,14 @@ function fillSettingsForm() {
   $('#s-ptt-release').value = settings.pttReleaseMs;
   $('#s-ptt-release-val').textContent = settings.pttReleaseMs + ' мс';
   $('#s-screen').value = settings.screenQuality;
+  $('#s-notify').checked = settings.notify;
+  $('#s-sounds').checked = settings.sounds;
   $('#s-vad-block').hidden = settings.mode !== 'vad';
   $('#s-ptt-block').hidden = settings.mode !== 'ptt';
+  $('#s-ptt-hint').textContent = desktop
+    ? 'Клавиша работает везде, даже когда ты в игре.'
+    : 'В браузере клавиша работает, только пока окно активно. В приложении для Windows — везде, даже в игре.';
+  paintAvatar($('#s-avatar'), joinInfo?.name || $('#join-name').value || '?', myAvatar);
 }
 
 async function openSettings() {
@@ -746,6 +1041,7 @@ async function openSettings() {
   }
   fillSettingsForm();
   await refreshDevices();
+  mic.setGate({ report: true });
   $('#settings').showModal();
 }
 
@@ -754,6 +1050,7 @@ function applySettings(immediate) {
   saveSettings();
   fillSettingsForm();
   updateControls();
+  syncDesktopPtt();
   clearTimeout(applyTimer);
   applyTimer = setTimeout(async () => {
     try {
@@ -774,6 +1071,14 @@ $('#s-output').onchange = async (e) => {
   for (const p of peers.values()) for (const el of p.audioEls.values()) el.setSinkId?.(settings.outputDeviceId).catch(() => {});
   testEl?.setSinkId?.(settings.outputDeviceId).catch(() => {});
   mic?.setOutputDevice(settings.outputDeviceId);
+};
+$('#s-camera').onchange = async (e) => {
+  settings.cameraDeviceId = e.target.value;
+  saveSettings();
+  if (local.camera) {
+    stopCamera();
+    await startCamera();
+  }
 };
 $('#s-volume').oninput = (e) => {
   settings.inputVolume = Number(e.target.value);
@@ -806,6 +1111,15 @@ $('#s-ptt-release').oninput = (e) => {
 };
 $('#s-screen').onchange = (e) => {
   settings.screenQuality = e.target.value;
+  saveSettings();
+};
+$('#s-notify').onchange = (e) => {
+  settings.notify = e.target.checked;
+  saveSettings();
+  if (settings.notify && 'Notification' in window) Notification.requestPermission().catch(() => {});
+};
+$('#s-sounds').onchange = (e) => {
+  settings.sounds = e.target.checked;
   saveSettings();
 };
 $('#s-ptt-key').onclick = (e) => {
@@ -853,13 +1167,71 @@ function stopTest() {
   $('#s-test').classList.remove('on');
   $('#s-test').textContent = 'Проверить микрофон';
 }
-$('#settings').addEventListener('close', stopTest);
+$('#settings').addEventListener('close', () => {
+  stopTest();
+  mic?.setGate({ report: false });
+});
+
+// Аватарка
+const avatarInput = $('#avatar-file');
+const pickAvatar = () => avatarInput.click();
+avatarInput.onchange = async () => {
+  const file = avatarInput.files[0];
+  avatarInput.value = '';
+  if (!file) return;
+  try {
+    setAvatar(await resizeAvatar(file));
+  } catch {
+    toast('Это вообще картинка? Выбери нормальную, бака.');
+  }
+};
+function setAvatar(url) {
+  myAvatar = url;
+  store.set('avatar', myAvatar);
+  const name = joinInfo?.name || $('#join-name').value || '?';
+  paintAvatar($('#join-avatar'), name, myAvatar);
+  paintAvatar($('#s-avatar'), name, myAvatar);
+  const self = document.querySelector('.tile.self .avatar');
+  if (self) paintAvatar(self, name, myAvatar);
+  sendWs({ type: 'profile', avatar: myAvatar });
+}
+$('#join-avatar').onclick = pickAvatar;
+$('#s-avatar').onclick = pickAvatar;
+$('#s-avatar-pick').onclick = pickAvatar;
+$('#s-avatar-clear').onclick = () => setAvatar(null);
+$('#join-name').addEventListener('input', () => paintAvatar($('#join-avatar'), $('#join-name').value || '?', myAvatar));
+
+// Выбор экрана в приложении (браузер показывает свой).
+desktop?.onPickSource(
+  (sources) =>
+    new Promise((resolve) => {
+      const dlg = $('#picker');
+      const list = $('#picker-list');
+      list.innerHTML = '';
+      const finish = (id) => {
+        dlg.close();
+        resolve(id ? { id, audio: $('#picker-audio').checked } : null);
+      };
+      for (const s of sources) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.innerHTML = `<img alt=""><span></span>`;
+        b.querySelector('img').src = s.thumbnail;
+        b.querySelector('span').textContent = s.name;
+        b.onclick = () => finish(s.id);
+        list.append(b);
+      }
+      $('#picker-cancel').onclick = () => finish(null);
+      dlg.oncancel = () => finish(null);
+      dlg.showModal();
+    })
+);
 
 // ---------- Вход / выход ----------
 function micErrorText(e) {
   if (!window.isSecureContext) return 'Браузер даёт доступ к микрофону только по https:// или на localhost. Открой комнату через https-ссылку туннеля.';
   if (e?.name === 'NotAllowedError') return 'Нет доступа к микрофону. Разреши его в настройках сайта (значок замка в адресной строке).';
-  if (e?.name === 'NotFoundError') return 'Микрофон не найден.';
+  if (e?.name === 'NotFoundError') return 'Микрофон не найден. Ты его вообще подключил?';
   return 'Ошибка микрофона: ' + (e?.message || e);
 }
 
@@ -877,11 +1249,13 @@ function backToJoin(error) {
   myId = null;
   for (const id of [...peers.keys()]) removePeer(id, true);
   if (local.sharing) stopShare();
+  if (local.camera) stopCamera();
   $('#tiles').innerHTML = '';
   renderStage();
   $('#room').hidden = true;
   $('#join').hidden = false;
   $('#join-btn').disabled = false;
+  $('#join-bubble').textContent = pick(SAY.greet);
   document.title = 'discordio';
   const err = $('#join-error');
   err.textContent = error || '';
@@ -918,7 +1292,21 @@ $('#join-settings').onclick = openSettings;
 (async () => {
   $('#join-name').value = store.get('name', '');
   $('#join-room').value = decodeURIComponent(location.hash.slice(1)).replace(/^room=/, '');
+  $('#join-bubble').textContent = pick(SAY.greet);
+  paintAvatar($('#join-avatar'), $('#join-name').value || '?', myAvatar);
   if ($('#join-name').value && $('#join-room').value) $('#join-password').focus();
+  if (desktop) {
+    $('#change-server').hidden = false;
+    $('#change-server').onclick = () => desktop.changeServer();
+    syncDesktopPtt();
+  } else if (/Windows/.test(navigator.userAgent)) {
+    $('#download-link').hidden = false;
+    const openApp = $('#open-app-link');
+    openApp.hidden = false;
+    const updateOpenApp = () => (openApp.href = `discordio://${location.host}/#${$('#join-room').value.trim()}`);
+    updateOpenApp();
+    $('#join-room').addEventListener('input', updateOpenApp);
+  }
   try {
     config = await (await fetch('/config.json')).json();
   } catch {}

@@ -14,8 +14,10 @@ class MicGateProcessor extends AudioWorkletProcessor {
     this.lastLoudAt = -1e9;
     this.gain = 0;
     this.levelDb = -100;
-    this.peakDb = -100;
     this.blocks = 0;
+    this.report = false; // подробный уровень нужен только открытым настройкам
+    this.lastOpen = false;
+    this.lastLoudMuted = false;
     this.port.onmessage = (e) => Object.assign(this, e.data);
   }
 
@@ -31,7 +33,6 @@ class MicGateProcessor extends AudioWorkletProcessor {
     const db = rms > 1e-6 ? 20 * Math.log10(rms) : -100;
     // Быстрая атака, медленный спад — так индикатор и детектор не «дрожат».
     this.levelDb = db > this.levelDb ? db : this.levelDb * 0.9 + db * 0.1;
-    if (db > this.peakDb) this.peakDb = db;
 
     let open;
     if (this.muted) open = false;
@@ -63,10 +64,15 @@ class MicGateProcessor extends AudioWorkletProcessor {
       if (c === output.length - 1) this.gain = g;
     }
 
-    if (++this.blocks >= 8) {
+    // Говорит при выключенном микрофоне — чтобы подсказать «эй, ты в муте».
+    const loudMuted = this.muted && this.levelDb >= Math.max(this.threshold, -45);
+    if (open !== this.lastOpen || loudMuted !== this.lastLoudMuted) {
+      this.lastOpen = open;
+      this.lastLoudMuted = loudMuted;
+      this.port.postMessage({ level: this.levelDb, open, loudMuted });
+    } else if (this.report && ++this.blocks >= 8) {
       this.blocks = 0;
-      this.port.postMessage({ level: this.levelDb, peak: this.peakDb, open });
-      this.peakDb = -100;
+      this.port.postMessage({ level: this.levelDb, open, loudMuted });
     }
     return true;
   }

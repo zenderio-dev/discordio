@@ -1,0 +1,75 @@
+{
+  "name": "discordio-desktop",
+  "productName": "discordio",
+  "version": "0.2.0",
+  "description": "discordio для Windows",
+  "author": "zenderio-dev",
+  "license": "MIT",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64",
+    "release": "electron-builder --win --x64 --publish always"
+  },
+  "dependencies": {
+    "uiohook-napi": "1.5.5"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "com.zenderio.discordio",
+    "productName": "discordio",
+    "files": [
+      "main.js",
+      "preload.js",
+      "connect.html",
+      "mascot.svg",
+      "icon.png",
+      "!node_modules/uiohook-napi/prebuilds/{darwin-*,linux-*,win32-arm64}/**",
+      "!node_modules/uiohook-napi/{src,libuiohook,binding.gyp}/**"
+    ],
+    "electronLanguages": [
+      "ru",
+      "en-US"
+    ],
+    "compression": "maximum",
+    "protocols": [
+      {
+        "name": "discordio",
+        "schemes": [
+          "discordio"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "discordio-Setup-${version}.${ext}",
+      "shortcutName": "discordio",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "zenderio-dev",
+        "repo": "discordio",
+        "releaseType": "release"
+      }
+    ],
+    "npmRebuild": false
+  }
+}
