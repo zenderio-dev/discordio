@@ -31,20 +31,32 @@ const SAY = {
     'Пароль не забудь, дурак!',
     'Хмф. Друзья уже ждут. Не я, а друзья!',
   ],
+  lobby: [
+    'Ну и чего стоишь? Выбери комнату, бака!',
+    'Заходи в комнату. Не то чтобы я подсказывала... просто так получилось.',
+    'Хмф. Заходи, где народ. Или создай свою, если такой особенный.',
+  ],
+  roomTaken: 'Ты зашёл в эту комнату с другого устройства, отсюда я тебя вывела.',
+  kickedByAdmin: 'Админ выгнал тебя из комнаты. Хмф, сам виноват!',
+  banned: 'Аккаунт заблокирован. Ну и дела...',
+  inviteCopied: 'Ссылку-приглашение скопировала. Отдай её другу!',
+  loggedOut: 'Ушёл, значит? Ну и ладно... Возвращайся. Если хочешь!',
   joined: (n) => pick([`${n} пришёл. Хмф, не то чтобы кто-то ждал!`, `${n} всё-таки явился. Наконец-то... то есть, ой, неважно!`, `${n} тут. Ну привет, раз так.`]),
   left: (n) => pick([`${n} ушёл. Ну и пусть! Мне всё равно... правда!`, `${n} сбежал. Б-бака...`, `${n} вышел. Не очень-то и хотелось.`]),
-  first: 'Ты первый в комнате. Скинь друзьям ссылку и пароль, а то так и будешь сидеть один.',
+  first: 'Ты первый в комнате. Нажми «Пригласить» и скинь друзьям ссылку, а то так и будешь сидеть один.',
   mutedTalking: 'Эй! Ты говоришь, а микрофон выключен. Бака!',
   pokedBy: (n) => `${n} тыкнул тебя! Хмф, внимания захотелось?`,
   poked: (n) => `Ты тыкнул ${n}. Доволен?`,
-  copied: 'Ссылку скопировала. Н-не ради тебя, а ради друзей! Пароль скажи сам.',
+  copied: 'Ссылку скопировала. Н-не ради тебя, а ради друзей!',
   reconnecting: 'Связь пропала... Н-не уходи, переподключаюсь!',
   reconnected: 'Вернулись. Я не волновалась, если что.',
 };
 const ERRORS = {
-  'wrong-password': 'Неверный пароль, бака! Попробуй ещё раз.',
   full: 'Тут уже полно народу! Подожди, нетерпеливый.',
-  'rate-limit': 'Слишком много попыток! Остынь минутку.',
+  'not-empty': 'Там кто-то сидит! Удалить можно только пустую комнату, бака.',
+  'last-room': 'Последнюю комнату не отдам!',
+  exists: 'Такая комната уже есть. Придумай что-нибудь своё!',
+  'no-room': 'Этой комнаты больше нет.',
 };
 
 // ---------- Настройки ----------
@@ -82,9 +94,8 @@ const store = {
 };
 const settings = { ...DEFAULTS, ...store.get('settings', {}) };
 if (!(settings.nsMode in NS_MODES)) settings.nsMode = DEFAULTS.nsMode;
-const peerVolumes = store.get('volumes', {}); // по имени участника
-const peerMuted = store.get('mutedPeers', {}); // заглушённые «для себя», по имени
-let myAvatar = store.get('avatar', null);
+const peerVolumes = store.get('volumes2', {}); // по id аккаунта участника
+const peerMuted = store.get('mutedPeers2', {}); // заглушённые «для себя», по id аккаунта
 
 const SCREEN_PRESETS = {
   '720p30': { width: 1280, height: 720, frameRate: 30, bitrate: 1_500_000, hint: 'detail' },
@@ -98,10 +109,17 @@ const CAMERA = { width: 640, height: 360, frameRate: 24, bitrate: 450_000 };
 let config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 let mic = null; // MicPipeline
 let ws = null;
-let myId = null;
-let joinInfo = null; // {room, name, password}
-let leaving = false;
+let me = null; // мой аккаунт {id, login, name, avatar}
+let myId = null; // id текущего подключения к серверу
+let loggedOut = true;
 let reconnectDelay = 1000;
+const users = new Map(); // аккаунты онлайн: id -> {id, login, name, avatar}
+let rooms = []; // [{id, name, members: [{id, userId, state}]}]
+let currentRoom = null; // {id, name}, если я в голосовой комнате
+let joiningRoom = null; // id комнаты, в которую сейчас захожу (или перезахожу после обрыва)
+const hashParams = new URLSearchParams(location.hash.slice(1));
+let autoJoin = hashParams.get('r'); // ссылка на комнату: #r=id
+let inviteToken = hashParams.get('invite'); // ссылка-приглашение: #invite=токен
 const local = {
   muted: false,
   deafened: false,
@@ -152,7 +170,7 @@ function sound(freqs, dur, vol) {
 function toast(text, ms = 5000) {
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = '<img src="/img/mascot.svg" alt="">';
+  el.innerHTML = '<img src="/img/mascot-face.webp" alt="">';
   el.append(text);
   $('#toasts').append(el);
   setTimeout(() => el.remove(), ms);
@@ -210,7 +228,7 @@ function onLevel({ level, open, loudMuted }) {
   }
   // Подсказка «ты в муте», если человек говорит дольше секунды.
   clearTimeout(loudMutedTimer);
-  if (loudMuted && myId && local.muted && !local.deafened && Date.now() - lastMutedHint > 30000) {
+  if (loudMuted && currentRoom && local.muted && !local.deafened && Date.now() - lastMutedHint > 30000) {
     loudMutedTimer = setTimeout(() => {
       lastMutedHint = Date.now();
       toast(SAY.mutedTalking);
@@ -225,18 +243,21 @@ function updateGate() {
 // ---------- Сигнальный сервер ----------
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onopen = () => {
-    reconnectDelay = 1000;
-    ws.send(JSON.stringify({ type: 'join', ...joinInfo, avatar: myAvatar }));
-  };
-  ws.onmessage = (e) => handleServer(JSON.parse(e.data));
-  ws.onclose = () => {
-    if (leaving || !myId) return;
-    // Потеряли сервер: сбрасываем соединения и входим заново.
+  const sock = new WebSocket(`${proto}://${location.host}/ws`);
+  ws = sock;
+  sock.onmessage = (e) => handleServer(JSON.parse(e.data));
+  sock.onclose = (e) => {
+    if (ws !== sock) return;
     myId = null;
-    for (const id of [...peers.keys()]) removePeer(id, true);
-    toast(SAY.reconnecting);
+    if (loggedOut) return;
+    if (e.code === 4001) return showAuth(); // сессия кончилась
+    if (e.code === 4003) return showAuth(SAY.banned);
+    // Потеряли сервер: сбрасываем соединения, после переподключения вернёмся в ту же комнату.
+    if (currentRoom) {
+      joiningRoom = currentRoom.id;
+      for (const id of [...peers.keys()]) removePeer(id, true);
+      toast(SAY.reconnecting);
+    }
     setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, 10000);
   };
@@ -262,34 +283,83 @@ function sendState() {
 
 async function handleServer(msg) {
   switch (msg.type) {
-    case 'error':
-      if (!myId) {
-        if (ws.readyState === WebSocket.OPEN) {
-          leaving = true;
-          ws.close();
-        }
-        backToJoin(ERRORS[msg.code] || msg.message);
+    case 'hello':
+      reconnectDelay = 1000;
+      myId = msg.id;
+      me = msg.me;
+      users.clear();
+      for (const u of msg.users) users.set(u.id, u);
+      rooms = msg.rooms;
+      renderMe();
+      renderRooms();
+      if (joiningRoom) sendWs({ type: 'join', room: joiningRoom });
+      else if (autoJoin && rooms.some((r) => r.id === autoJoin)) joinRoom(autoJoin);
+      autoJoin = null;
+      break;
+    case 'rooms':
+      rooms = msg.rooms;
+      renderRooms();
+      break;
+    case 'user': {
+      users.set(msg.user.id, msg.user);
+      if (msg.user.id === me?.id) {
+        me = msg.user;
+        renderMe();
       }
+      for (const p of peers.values()) {
+        if (p.userId !== msg.user.id) continue;
+        p.name = msg.user.name;
+        p.avatar = msg.user.avatar;
+        paintAvatar(p.tile.querySelector('.avatar'), p.name, p.avatar);
+        p.tile.querySelector('.tile-name').textContent = p.name;
+      }
+      renderRooms();
+      break;
+    }
+    case 'error':
+      if (joiningRoom && ['full', 'no-room'].includes(msg.code)) {
+        joiningRoom = null;
+        if (currentRoom) leaveRoomUi();
+      }
+      toast(ERRORS[msg.code] || msg.message);
+      break;
+    case 'kicked':
+      if (currentRoom) leaveRoomUi();
+      toast(msg.reason === 'admin' ? SAY.kickedByAdmin : SAY.roomTaken, 7000);
+      break;
+    case 'admin-data':
+      adminData = msg;
+      renderAdmin();
+      break;
+    case 'invite-created':
+      copyText(msg.url, SAY.inviteCopied);
+      break;
+    case 'password-reset':
+      showAdminNotice(`Новый пароль для ${msg.login}:`, msg.password);
       break;
     case 'joined': {
-      const firstJoin = $('#room').hidden;
-      myId = msg.id;
-      if (firstJoin) {
-        enterRoomUi(msg.room);
+      const rejoin = currentRoom?.id === msg.room.id;
+      joiningRoom = null;
+      for (const id of [...peers.keys()]) removePeer(id, true);
+      if (!rejoin && currentRoom) resetMedia();
+      currentRoom = msg.room;
+      enterRoomUi(msg.room);
+      if (rejoin) {
+        toast(SAY.reconnected);
+      } else {
         $('#messages').innerHTML = '';
         msg.history.forEach(addChatMessage);
         addSystemMessage(msg.peers.length ? `В комнате: ${msg.peers.map((p) => p.name).join(', ')}` : SAY.first);
         if (settings.notify && 'Notification' in window && Notification.permission === 'default') {
           Notification.requestPermission().catch(() => {});
         }
-      } else {
-        toast(SAY.reconnected);
       }
       renderSelfTile();
       sendState();
       // Новичок ждёт предложения от тех, кто уже в комнате: так обе стороны не шлют offer одновременно.
       for (const p of msg.peers) createPeer(p, true);
       updateAlone();
+      renderRooms();
       break;
     }
     case 'peer-joined':
@@ -312,16 +382,17 @@ async function handleServer(msg) {
       const p = peers.get(msg.id);
       if (!p) break;
       p.state = msg.state;
+      if (!p.state.sharing) p.preview = null;
       updateTile(p);
       renderPeerVideo(p);
       renderStage();
       break;
     }
-    case 'profile': {
+    case 'preview': {
       const p = peers.get(msg.id);
-      if (!p) break;
-      p.avatar = msg.avatar;
-      paintAvatar(p.tile.querySelector('.avatar'), p.name, p.avatar);
+      if (!p || !p.state.sharing) break;
+      p.preview = msg.image;
+      renderStage();
       break;
     }
     case 'poke':
@@ -353,7 +424,7 @@ function notifyMessage(m) {
   if (!settings.notify || (document.hasFocus() && !document.hidden)) return;
   desktop?.flash();
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const avatar = [...peers.values()].find((p) => p.id === m.from)?.avatar;
+  const avatar = users.get(m.userId)?.avatar;
   const n = new Notification(m.name, { body: m.text.slice(0, 200), icon: avatar || '/img/icon.svg', silent: !settings.sounds });
   n.onclick = () => {
     window.focus();
@@ -367,9 +438,12 @@ function createPeer(info, waitForOffer = false) {
   const pc = new RTCPeerConnection({ iceServers: config.iceServers });
   const peer = {
     id: info.id,
+    userId: info.userId,
     name: info.name,
     avatar: info.avatar || null,
     state: info.state || {},
+    preview: info.preview || null, // снимок экрана, пока его стрим не смотрю
+    wantsScreen: false, // этот участник смотрит мой стрим
     pc,
     polite: myId < info.id,
     makingOffer: false,
@@ -440,7 +514,15 @@ async function onSignal(from, data) {
   if (!peer) return;
   const pc = peer.pc;
   try {
-    if (data.description) {
+    if ('watch' in data) {
+      // Друг начал или перестал смотреть мой стрим: экран шлём только тем, кто смотрит.
+      peer.wantsScreen = !!data.watch;
+      if (peer.wantsScreen) sendScreenTo(peer);
+      else {
+        removeSenders(peer, peer.screenSenders);
+        peer.screenSenders = [];
+      }
+    } else if (data.description) {
       const desc = data.description;
       const collision = desc.type === 'offer' && (peer.makingOffer || pc.signalingState !== 'stable');
       peer.ignoreOffer = !peer.polite && collision;
@@ -506,8 +588,8 @@ async function tuneSenders(peer) {
 
 function applyPeerAudio(peer) {
   for (const el of peer.audioEls.values()) {
-    el.volume = (peerVolumes[peer.name] ?? 100) / 100;
-    el.muted = local.deafened || !!peerMuted[peer.name];
+    el.volume = (peerVolumes[peer.userId] ?? 100) / 100;
+    el.muted = local.deafened || !!peerMuted[peer.userId];
   }
 }
 
@@ -536,13 +618,21 @@ function removePeer(id, silent) {
   for (const el of peer.audioEls.values()) el.srcObject = null;
   peer.tile?.remove();
   peers.delete(id);
+  if (watching === id) watching = null;
   if (!silent) renderStage();
 }
 
 function addLocalTracks(peer) {
   peer.pc.addTrack(mic.track, mic.stream);
-  if (local.sharing && local.screenStream) peer.screenSenders = addTracks(peer, local.screenStream);
+  if (peer.wantsScreen) sendScreenTo(peer);
   if (local.camera && local.camStream) peer.camSenders = addTracks(peer, local.camStream);
+}
+
+function sendScreenTo(peer) {
+  // Пока соединение не согласовано, треки добавит addLocalTracks.
+  if (!local.sharing || !local.screenStream || peer.screenSenders.length || peer.waitingOffer) return;
+  peer.screenSenders = addTracks(peer, local.screenStream);
+  setTimeout(() => tuneSenders(peer), 1500);
 }
 
 // ---------- Камера и демонстрация экрана ----------
@@ -600,7 +690,9 @@ async function startShare() {
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: preset.width }, height: { ideal: preset.height }, frameRate: { ideal: preset.frameRate } },
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      // restrictOwnAudio: в стрим не попадает то, что играет сама страница (голоса друзей,
+      // звук чужих стримов). Без этого два стримера со звуком гоняют звук по кругу.
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true },
       systemAudio: 'include',
       selfBrowserSurface: 'exclude',
     });
@@ -613,12 +705,9 @@ async function startShare() {
   video.addEventListener('ended', stopShare);
   local.screenStream = stream;
   local.sharing = true;
+  // Сам стрим уйдёт только тем, кто нажмёт «Смотреть». Остальным — редкие снимки для превью.
+  local.stopPreviews = startPreviews(stream);
   sendState();
-  for (const peer of peers.values()) {
-    if (peer.waitingOffer) continue;
-    peer.screenSenders = addTracks(peer, stream);
-    setTimeout(() => tuneSenders(peer), 1500);
-  }
   updateControls();
   renderStage();
 }
@@ -628,12 +717,55 @@ function stopShare() {
   for (const peer of peers.values()) {
     removeSenders(peer, peer.screenSenders);
     peer.screenSenders = [];
+    peer.wantsScreen = false;
   }
+  local.stopPreviews?.();
   local.screenStream.getTracks().forEach((t) => t.stop());
   local.screenStream = null;
   local.sharing = false;
+  if (watching === 'self') watching = null;
   sendState();
   updateControls();
+  renderStage();
+}
+
+// Превью стрима: маленький JPEG раз в несколько секунд через сервер (~10 КБ вместо видеопотока).
+const PREVIEW = { width: 320, height: 180, everyMs: 5000 };
+function startPreviews(stream) {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.srcObject = stream;
+  video.play().catch(() => {});
+  const canvas = document.createElement('canvas');
+  canvas.width = PREVIEW.width;
+  canvas.height = PREVIEW.height;
+  const ctx = canvas.getContext('2d');
+  const snap = () => {
+    if (!video.videoWidth || !peers.size) return;
+    const k = Math.min(PREVIEW.width / video.videoWidth, PREVIEW.height / video.videoHeight);
+    const w = video.videoWidth * k;
+    const h = video.videoHeight * k;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, PREVIEW.width, PREVIEW.height);
+    ctx.drawImage(video, (PREVIEW.width - w) / 2, (PREVIEW.height - h) / 2, w, h);
+    sendWs({ type: 'preview', image: canvas.toDataURL('image/jpeg', 0.6) });
+  };
+  const first = setTimeout(snap, 800);
+  const timer = setInterval(snap, PREVIEW.everyMs);
+  return () => {
+    clearTimeout(first);
+    clearInterval(timer);
+    video.srcObject = null;
+  };
+}
+
+// Смотреть можно только один стрим за раз; id участника, 'self' или null.
+let watching = null;
+function watchStream(id) {
+  if (watching === id) return;
+  if (watching && watching !== 'self') sendWs({ type: 'signal', to: watching, data: { watch: false } });
+  watching = id;
+  if (id && id !== 'self') sendWs({ type: 'signal', to: id, data: { watch: true } });
   renderStage();
 }
 
@@ -674,36 +806,82 @@ function renderSelfVideo() {
   if (tile) setTileVideo(tile, local.camStream);
 }
 
+// Сцена: сверху стрим, который смотришь (один), под ним карточки остальных стримов с превью.
 function renderStage() {
   const stage = $('#stage');
-  const views = [];
-  if (local.sharing && local.screenStream) views.push({ key: 'self', name: 'Твой экран', stream: local.screenStream });
-  for (const p of peers.values()) {
-    const s = peerScreenStream(p);
-    if (s) views.push({ key: p.id, name: `Экран: ${p.name}`, stream: s });
-  }
-  const existing = new Map([...stage.children].map((el) => [el.dataset.key, el]));
-  for (const v of views) {
-    let el = existing.get(v.key);
-    if (!el) {
-      el = document.createElement('div');
-      el.className = 'screen-view';
-      el.dataset.key = v.key;
-      el.innerHTML = `<video autoplay playsinline muted></video><span class="label"></span><button class="fs" title="На весь экран">⛶</button>`;
-      el.querySelector('.fs').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen());
-      el.querySelector('video').ondblclick = () => el.requestFullscreen();
-      stage.append(el);
+  const streams = [];
+  if (local.sharing && local.screenStream) streams.push({ id: 'self', name: 'Твой экран' });
+  for (const p of peers.values()) if (p.state.sharing) streams.push({ id: p.id, name: p.name, peer: p });
+  if (watching && !streams.some((s) => s.id === watching)) watching = null;
+
+  let main = stage.querySelector('.screen-view');
+  const watched = streams.find((s) => s.id === watching);
+  if (watched) {
+    if (!main) {
+      main = document.createElement('div');
+      main.className = 'screen-view';
+      main.innerHTML = `<video autoplay playsinline muted></video><span class="label"></span>
+        <div class="view-actions"><button class="fs" title="На весь экран">⛶</button><button class="unwatch" title="Перестать смотреть">✕</button></div>`;
+      main.querySelector('.fs').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : main.requestFullscreen());
+      main.querySelector('.unwatch').onclick = () => watchStream(null);
+      main.querySelector('video').ondblclick = () => main.requestFullscreen();
+      stage.prepend(main);
     }
-    const video = el.querySelector('video');
-    if (video.srcObject !== v.stream) video.srcObject = v.stream;
-    el.querySelector('.label').textContent = v.name;
-    existing.delete(v.key);
+    const stream = watched.peer ? peerScreenStream(watched.peer) : local.screenStream;
+    const video = main.querySelector('video');
+    if (video.srcObject !== stream) video.srcObject = stream;
+    // Пока видео не пришло, показываем превью и «подключаюсь».
+    main.classList.toggle('loading', !stream);
+    main.style.backgroundImage = !stream && watched.peer?.preview ? `url("${watched.peer.preview}")` : '';
+    main.querySelector('.label').textContent = watched.peer ? `Экран: ${watched.name}` : watched.name;
+  } else if (main) {
+    main.querySelector('video').srcObject = null;
+    main.remove();
+  }
+
+  let cards = stage.querySelector('.stream-cards');
+  if (!cards) {
+    cards = document.createElement('div');
+    cards.className = 'stream-cards';
+    stage.append(cards);
+  }
+  const existing = new Map([...cards.children].map((el) => [el.dataset.key, el]));
+  for (const s of streams) {
+    if (s.id === watching) continue;
+    let card = existing.get(s.id);
+    existing.delete(s.id);
+    if (!card) {
+      card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'stream-card';
+      card.dataset.key = s.id;
+      card.title = 'Смотреть';
+      card.innerHTML = `<span class="live">в эфире</span><span class="label"></span><span class="watch">Смотреть</span>`;
+      card.onclick = () => watchStream(s.id);
+      // Свой экран показываем вживую: он и так есть локально, сеть не тратится.
+      card.prepend(document.createElement(s.peer ? 'img' : 'video'));
+      if (!s.peer) {
+        const v = card.querySelector('video');
+        v.autoplay = v.muted = v.playsInline = true;
+        v.srcObject = local.screenStream;
+      }
+      cards.append(card);
+    }
+    card.querySelector('.label').textContent = s.name;
+    if (s.peer) {
+      const img = card.querySelector('img');
+      img.hidden = !s.peer.preview;
+      if (s.peer.preview && img.src !== s.peer.preview) img.src = s.peer.preview;
+      card.classList.toggle('no-preview', !s.peer.preview);
+    }
   }
   for (const el of existing.values()) {
-    el.querySelector('video').srcObject = null;
+    const v = el.querySelector('video');
+    if (v) v.srcObject = null;
     el.remove();
   }
-  stage.hidden = views.length === 0;
+  cards.hidden = !cards.children.length;
+  stage.hidden = streams.length === 0;
 }
 
 // ---------- Плитки участников ----------
@@ -716,8 +894,8 @@ function makeTile(name, avatar) {
 
 function renderSelfTile() {
   document.querySelector('.tile.self')?.remove();
-  const tile = makeTile(joinInfo.name, myAvatar);
-  tile.querySelector('.tile-name').textContent = joinInfo.name + ' (ты)';
+  const tile = makeTile(me.name, me.avatar);
+  tile.querySelector('.tile-name').textContent = me.name + ' (ты)';
   tile.classList.add('self');
   $('#tiles').prepend(tile);
   updateSelfTile();
@@ -734,25 +912,30 @@ function updateSelfTile() {
 function renderPeerTile(peer) {
   const tile = makeTile(peer.name, peer.avatar);
   const slider = tile.querySelector('input');
-  slider.value = peerVolumes[peer.name] ?? 100;
+  slider.value = peerVolumes[peer.userId] ?? 100;
   slider.title = `Громкость: ${slider.value}%`;
   slider.oninput = () => {
     const v = Number(slider.value);
-    peerVolumes[peer.name] = v;
-    store.set('volumes', peerVolumes);
+    peerVolumes[peer.userId] = v;
+    store.set('volumes2', peerVolumes);
     slider.title = `Громкость: ${v}%`;
     applyPeerAudio(peer);
   };
   tile.querySelector('.mute-for-me').onclick = () => {
-    if (peerMuted[peer.name]) delete peerMuted[peer.name];
-    else peerMuted[peer.name] = true;
-    store.set('mutedPeers', peerMuted);
+    if (peerMuted[peer.userId]) delete peerMuted[peer.userId];
+    else peerMuted[peer.userId] = true;
+    store.set('mutedPeers2', peerMuted);
     applyPeerAudio(peer);
     updateTile(peer);
   };
   tile.querySelector('.poke').onclick = () => {
     sendWs({ type: 'poke', to: peer.id });
     toast(SAY.poked(peer.name), 3000);
+  };
+  const kick = tile.querySelector('.kick');
+  kick.hidden = !me?.admin;
+  kick.onclick = () => {
+    if (confirm(`Выгнать ${peer.name} из комнаты?`)) sendWs({ type: 'kick', userId: peer.userId });
   };
   peer.tile = tile;
   $('#tiles').append(tile);
@@ -764,7 +947,7 @@ function updateTile(peer) {
   const tile = peer.tile;
   if (!tile) return;
   const s = peer.state;
-  const mutedForMe = !!peerMuted[peer.name];
+  const mutedForMe = !!peerMuted[peer.userId];
   tile.querySelector('.tile-icons').innerHTML =
     (s.muted || s.deafened ? ICONS.micOff : '') +
     (s.deafened ? ICONS.headOff : '') +
@@ -781,7 +964,7 @@ function updateTile(peer) {
 }
 
 function updateAlone() {
-  $('#alone').hidden = peers.size > 0 || !myId;
+  $('#alone').hidden = peers.size > 0 || !currentRoom;
 }
 
 // Кто говорит и пинг. Пока окно свёрнуто, не опрашиваем — экономим процессор.
@@ -790,7 +973,7 @@ setInterval(() => {
   for (const peer of peers.values()) {
     const receiver = peer.pc.getReceivers().find((r) => r.track === peer.micTrack);
     const level = receiver?.getSynchronizationSources?.()[0]?.audioLevel ?? 0;
-    peer.tile?.classList.toggle('speaking', level > 0.015 && !peer.state.muted && !peerMuted[peer.name]);
+    peer.tile?.classList.toggle('speaking', level > 0.015 && !peer.state.muted && !peerMuted[peer.userId]);
   }
 }, 200);
 setInterval(async () => {
@@ -821,7 +1004,7 @@ function addChatMessage(m) {
   el.className = 'msg';
   const time = new Date(m.ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   el.innerHTML = `<div class="avatar"></div><div class="msg-body"><div class="meta"><b>${escapeHtml(m.name)}</b>${time}</div><div class="text">${linkify(m.text)}</div></div>`;
-  const avatar = m.from === myId ? myAvatar : peers.get(m.from)?.avatar;
+  const avatar = users.get(m.userId)?.avatar;
   paintAvatar(el.querySelector('.avatar'), m.name, avatar);
   box.append(el);
   if (atBottom || m.from === myId) box.scrollTop = box.scrollHeight;
@@ -918,7 +1101,7 @@ $('#btn-share').onclick = () => (local.sharing ? stopShare() : startShare());
 $('#btn-settings').onclick = openSettings;
 $('#btn-leave').onclick = leave;
 $('#copy-link').onclick = async () => {
-  const url = `${location.origin}/#${joinInfo.room}`;
+  const url = `${config.publicUrl || location.origin}/#r=${currentRoom.id}`;
   try {
     await navigator.clipboard.writeText(url);
     toast(SAY.copied);
@@ -939,11 +1122,11 @@ let bindingKey = false;
 const isTyping = (e) => e.target.closest?.('input, textarea, select') && !e.target.matches('input[type=range]');
 document.addEventListener('keydown', (e) => {
   if (bindingKey) return;
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyM' && myId) {
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyM' && currentRoom) {
     e.preventDefault();
     return toggleMute();
   }
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyD' && myId) {
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyD' && currentRoom) {
     e.preventDefault();
     return toggleDeafen();
   }
@@ -1030,7 +1213,9 @@ function fillSettingsForm() {
   $('#s-ptt-hint').textContent = desktop
     ? 'Клавиша работает везде, даже когда ты в игре.'
     : 'В браузере клавиша работает, только пока окно активно. В приложении для Windows — везде, даже в игре.';
-  paintAvatar($('#s-avatar'), joinInfo?.name || $('#join-name').value || '?', myAvatar);
+  paintAvatar($('#s-avatar'), me?.name || '?', me?.avatar);
+  $('#s-name').value = me?.name || '';
+  $('#s-name').disabled = !me;
 }
 
 async function openSettings() {
@@ -1185,21 +1370,19 @@ avatarInput.onchange = async () => {
     toast('Это вообще картинка? Выбери нормальную, бака.');
   }
 };
+// Профиль хранится на сервере; он же разошлёт обновление всем, включая нас самих.
 function setAvatar(url) {
-  myAvatar = url;
-  store.set('avatar', myAvatar);
-  const name = joinInfo?.name || $('#join-name').value || '?';
-  paintAvatar($('#join-avatar'), name, myAvatar);
-  paintAvatar($('#s-avatar'), name, myAvatar);
-  const self = document.querySelector('.tile.self .avatar');
-  if (self) paintAvatar(self, name, myAvatar);
-  sendWs({ type: 'profile', avatar: myAvatar });
+  if (!me) return;
+  paintAvatar($('#s-avatar'), me.name, url);
+  sendWs({ type: 'profile', avatar: url });
 }
-$('#join-avatar').onclick = pickAvatar;
+$('#s-name').onchange = (e) => {
+  const name = e.target.value.replace(/\s+/g, ' ').trim();
+  if (name && name !== me?.name) sendWs({ type: 'profile', name });
+};
 $('#s-avatar').onclick = pickAvatar;
 $('#s-avatar-pick').onclick = pickAvatar;
 $('#s-avatar-clear').onclick = () => setAvatar(null);
-$('#join-name').addEventListener('input', () => paintAvatar($('#join-avatar'), $('#join-name').value || '?', myAvatar));
 
 // Выбор экрана в приложении (браузер показывает свой).
 desktop?.onPickSource(
@@ -1227,94 +1410,390 @@ desktop?.onPickSource(
     })
 );
 
-// ---------- Вход / выход ----------
+// ---------- Список комнат ----------
+function renderMe() {
+  if (!me) return;
+  paintAvatar($('#me-avatar'), me.name, me.avatar);
+  $('#me-name').textContent = me.name;
+  $('#me-login').textContent = '@' + me.login;
+  $('#admin-btn').hidden = !me.admin;
+  const self = document.querySelector('.tile.self');
+  if (self) {
+    paintAvatar(self.querySelector('.avatar'), me.name, me.avatar);
+    self.querySelector('.tile-name').textContent = me.name + ' (ты)';
+  }
+  if ($('#settings').open) paintAvatar($('#s-avatar'), me.name, me.avatar);
+}
+
+function renderRooms() {
+  const list = $('#room-list');
+  list.innerHTML = '';
+  for (const r of rooms) {
+    const li = document.createElement('li');
+    li.className = 'room-item';
+    li.classList.toggle('current', currentRoom?.id === r.id);
+    li.innerHTML = `
+      <div class="room-row">
+        <button type="button" class="room-btn" title="Зайти">${ICONS.speaker}<span></span><small></small></button>
+        <button type="button" class="mini" data-act="rename" title="Переименовать">✎</button>
+        <button type="button" class="mini" data-act="delete" title="Удалить">✕</button>
+      </div>`;
+    li.querySelector('.room-btn span').textContent = r.name;
+    li.querySelector('.room-btn small').textContent = r.members.length || '';
+    li.querySelector('.room-btn').onclick = () => joinRoom(r.id);
+    li.querySelector('[data-act=rename]').onclick = async () => {
+      const name = await askRoomName('Переименовать комнату', r.name);
+      if (name && name !== r.name) sendWs({ type: 'rename-room', id: r.id, name });
+    };
+    const del = li.querySelector('[data-act=delete]');
+    del.hidden = r.members.length > 0 || rooms.length === 1;
+    del.onclick = () => {
+      if (confirm(`Удалить комнату «${r.name}»? Её чат тоже пропадёт.`)) sendWs({ type: 'delete-room', id: r.id });
+    };
+    if (r.members.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'member-list';
+      for (const m of r.members) {
+        const u = users.get(m.userId) || { name: '?' };
+        const row = document.createElement('li');
+        row.innerHTML = '<div class="avatar"></div><span></span><i></i>';
+        paintAvatar(row.querySelector('.avatar'), u.name, u.avatar);
+        row.querySelector('span').textContent = u.name + (m.id === myId ? ' (ты)' : '');
+        row.querySelector('i').innerHTML =
+          (m.state.sharing ? '<b class="live">в эфире</b>' : '') +
+          (m.state.muted || m.state.deafened ? ICONS.micOff : '') +
+          (m.state.deafened ? ICONS.headOff : '');
+        ul.append(row);
+      }
+      li.append(ul);
+    }
+    list.append(li);
+  }
+}
+
+// prompt() в приложении не работает, поэтому своё окошко.
+function askRoomName(title, value = '') {
+  return new Promise((resolve) => {
+    const dlg = $('#room-dialog');
+    $('#room-dialog-title').textContent = title;
+    $('#room-dialog-name').value = value;
+    dlg.returnValue = '';
+    dlg.onclose = () => resolve(dlg.returnValue === 'ok' ? $('#room-dialog-name').value.replace(/\s+/g, ' ').trim() : null);
+    dlg.showModal();
+  });
+}
+$('#add-room').onclick = async () => {
+  const name = await askRoomName('Новая комната');
+  if (name) sendWs({ type: 'create-room', name });
+};
+
+const closeSidebar = () => $('#app').classList.remove('side-open');
+$('#lobby-menu').onclick = $('#room-menu').onclick = () => $('#app').classList.toggle('side-open');
+
+// ---------- Вход в комнату и выход ----------
 function micErrorText(e) {
-  if (!window.isSecureContext) return 'Браузер даёт доступ к микрофону только по https:// или на localhost. Открой комнату через https-ссылку туннеля.';
+  if (!window.isSecureContext) return 'Браузер даёт доступ к микрофону только по https:// или на localhost. Открой сайт по https-ссылке.';
   if (e?.name === 'NotAllowedError') return 'Нет доступа к микрофону. Разреши его в настройках сайта (значок замка в адресной строке).';
   if (e?.name === 'NotFoundError') return 'Микрофон не найден. Ты его вообще подключил?';
   return 'Ошибка микрофона: ' + (e?.message || e);
 }
 
+async function joinRoom(id) {
+  closeSidebar();
+  if (currentRoom?.id === id || joiningRoom === id) return;
+  try {
+    await ensureMic();
+  } catch (e) {
+    console.error(e);
+    return warn(micErrorText(e));
+  }
+  joiningRoom = id;
+  sendWs({ type: 'join', room: id });
+}
+
+function resetMedia() {
+  if (local.sharing) stopShare();
+  if (local.camera) stopCamera();
+}
+
 function enterRoomUi(room) {
-  $('#join').hidden = true;
+  $('#lobby').hidden = true;
   $('#room').hidden = false;
-  $('#room-name').textContent = room;
-  history.replaceState(null, '', '#' + room);
-  document.title = `${room} · discordio`;
+  $('#room-name').textContent = room.name;
+  history.replaceState(null, '', '#r=' + room.id);
+  document.title = `${room.name} · discordio`;
   if (window.innerWidth <= 760) $('.layout').classList.remove('chat-open');
   updateControls();
 }
 
-function backToJoin(error) {
-  myId = null;
+function leaveRoomUi() {
   for (const id of [...peers.keys()]) removePeer(id, true);
-  if (local.sharing) stopShare();
-  if (local.camera) stopCamera();
+  resetMedia();
+  currentRoom = null;
+  joiningRoom = null;
   $('#tiles').innerHTML = '';
   renderStage();
   $('#room').hidden = true;
-  $('#join').hidden = false;
-  $('#join-btn').disabled = false;
-  $('#join-bubble').textContent = pick(SAY.greet);
+  $('#lobby').hidden = false;
+  $('#lobby-text').textContent = pick(SAY.lobby);
+  history.replaceState(null, '', location.pathname);
   document.title = 'discordio';
-  const err = $('#join-error');
+  if (window.innerWidth <= 760) $('#app').classList.add('side-open');
+  renderRooms();
+}
+
+function leave() {
+  sendWs({ type: 'leave' });
+  leaveRoomUi();
+}
+
+// ---------- Аккаунт ----------
+const authMode = () => document.querySelector('#auth-tabs input:checked').value;
+function syncAuthForm() {
+  const reg = authMode() === 'register';
+  $('#auth-name-row').hidden = !reg;
+  $('#auth-btn').textContent = reg ? 'Создать аккаунт' : 'Войти';
+  $('#auth-password').autocomplete = reg ? 'new-password' : 'current-password';
+}
+$('#auth-tabs').onchange = syncAuthForm;
+
+$('#auth-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const err = $('#auth-error');
+  err.hidden = true;
+  $('#auth-btn').disabled = true;
+  const reg = authMode() === 'register';
+  try {
+    const res = await fetch(reg ? '/api/register' : '/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        login: $('#auth-login').value.trim(),
+        password: $('#auth-password').value,
+        name: $('#auth-name').value,
+        invite: inviteToken,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Ошибка сервера (${res.status})`);
+    $('#auth-password').value = '';
+    if (reg) {
+      inviteToken = null;
+      $('#auth-invite').hidden = $('#auth-register-tab').hidden = true;
+      document.querySelector('#auth-tabs input[value=login]').checked = true;
+      syncAuthForm();
+      history.replaceState(null, '', location.pathname);
+    }
+    showApp(data.user);
+  } catch (e2) {
+    err.textContent = e2 instanceof TypeError ? 'Сервер не отвечает. Он точно запущен?' : e2.message;
+    err.hidden = false;
+  } finally {
+    $('#auth-btn').disabled = false;
+  }
+};
+
+function showAuth(error) {
+  loggedOut = true;
+  if (currentRoom) leaveRoomUi();
+  me = null;
+  const sock = ws;
+  ws = null;
+  sock?.close();
+  $('#app').hidden = true;
+  $('#auth').hidden = false;
+  $('#join-bubble').textContent = pick(SAY.greet);
+  const err = $('#auth-error');
   err.textContent = error || '';
   err.hidden = !error;
 }
 
-function leave() {
-  leaving = true;
-  ws?.close();
-  backToJoin();
+function showApp(user) {
+  me = user;
+  loggedOut = false;
+  $('#auth').hidden = true;
+  $('#app').hidden = false;
+  $('#lobby').hidden = !!currentRoom;
+  $('#lobby-text').textContent = pick(SAY.lobby);
+  renderMe();
+  // На телефоне список комнат спрятан в меню: в лобби сразу его открываем.
+  if (!currentRoom && window.innerWidth <= 760) $('#app').classList.add('side-open');
+  connect();
 }
 
-$('#join-form').onsubmit = async (e) => {
-  e.preventDefault();
-  $('#join-error').hidden = true;
-  $('#join-btn').disabled = true;
-  const name = $('#join-name').value.trim();
-  const room = $('#join-room').value.trim().toLowerCase();
-  const password = $('#join-password').value;
-  store.set('name', name);
-  try {
-    await ensureMic();
-  } catch (err) {
-    console.error(err);
-    return backToJoin(micErrorText(err));
-  }
-  joinInfo = { name, room, password };
-  leaving = false;
-  connect();
+$('#logout').onclick = async () => {
+  if (!confirm('Выйти из аккаунта?')) return;
+  showAuth();
+  await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+  toast(SAY.loggedOut);
 };
-$('#join-settings').onclick = openSettings;
+$('#side-settings').onclick = openSettings;
+
+// ---------- Приглашение при регистрации ----------
+async function checkInvite() {
+  const hint = $('#auth-invite');
+  hint.hidden = false;
+  try {
+    const res = await fetch('/api/invite/' + encodeURIComponent(inviteToken));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    $('#auth-register-tab').hidden = false;
+    document.querySelector('#auth-tabs input[value=register]').checked = true;
+    if (data.forLogin) {
+      $('#auth-login').value = data.forLogin;
+      $('#auth-login').readOnly = true;
+    }
+    hint.textContent = 'Тебя пригласили! Придумай логин и пароль. Н-не то чтобы я радовалась новенькому...';
+    syncAuthForm();
+  } catch (e) {
+    inviteToken = null;
+    hint.textContent = e.message || 'Приглашение недействительно';
+    hint.classList.add('error');
+  }
+}
+
+// ---------- Админка ----------
+let adminData = null;
+
+async function copyText(text, okMessage) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(okMessage);
+  } catch {
+    showAdminNotice('Скопируй вручную:', text);
+  }
+}
+
+function showAdminNotice(title, value) {
+  const box = $('#admin-notice');
+  box.hidden = false;
+  box.innerHTML = '<b></b><code></code><button type="button" class="secondary small">Копировать</button>';
+  box.querySelector('b').textContent = title;
+  box.querySelector('code').textContent = value;
+  box.querySelector('button').onclick = () => copyText(value, 'Скопировала.');
+  if (!$('#admin').open) $('#admin').showModal();
+}
+
+const fmtDate = (ts) => new Date(ts).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+function renderAdmin() {
+  if (!adminData) return;
+  const invList = $('#inv-list');
+  invList.innerHTML = adminData.invites.length ? '' : '<li class="hint">Активных приглашений нет.</li>';
+  for (const i of adminData.invites) {
+    const li = document.createElement('li');
+    li.innerHTML = `<div class="grow"><code></code><small></small></div>
+      <button type="button" class="secondary small" data-act="copy">Копировать</button>
+      <button type="button" class="link" data-act="revoke">Отозвать</button>`;
+    li.querySelector('code').textContent = i.url;
+    li.querySelector('small').textContent = [
+      i.forLogin ? `только для ${i.forLogin}` : `использовано ${i.uses}${i.maxUses ? ' из ' + i.maxUses : ''}`,
+      i.expires ? `до ${fmtDate(i.expires)}` : 'бессрочно',
+    ].join(' · ');
+    li.querySelector('[data-act=copy]').onclick = () => copyText(i.url, SAY.inviteCopied);
+    li.querySelector('[data-act=revoke]').onclick = () => {
+      if (confirm('Отозвать приглашение? По этой ссылке больше никто не зарегистрируется.')) sendWs({ type: 'invite-revoke', token: i.token });
+    };
+    invList.append(li);
+  }
+
+  const userList = $('#user-list');
+  userList.innerHTML = '';
+  const sorted = [...adminData.users].sort((a, b) => b.online - a.online || a.login.localeCompare(b.login));
+  for (const u of sorted) {
+    const li = document.createElement('li');
+    li.classList.toggle('banned', u.banned);
+    li.innerHTML = '<div class="grow"><b></b> <span class="muted"></span><small></small></div>';
+    li.querySelector('b').textContent = u.name;
+    li.querySelector('.muted').textContent = '@' + u.login;
+    const room = u.roomId && rooms.find((r) => r.id === u.roomId);
+    li.querySelector('small').textContent = [
+      u.admin && 'админ',
+      u.banned ? 'заблокирован' : u.online ? (room ? `в комнате «${room.name}»` : 'онлайн') : 'не в сети',
+      `с ${fmtDate(u.createdAt)}`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const add = (label, cls, onclick) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.textContent = label;
+      b.onclick = onclick;
+      li.append(b);
+    };
+    if (room && u.id !== me.id) {
+      add('Выгнать', 'secondary small', () => {
+        if (confirm(`Выгнать ${u.name} из комнаты?`)) sendWs({ type: 'kick', userId: u.id });
+      });
+    }
+    if (!u.admin) {
+      add(u.banned ? 'Разбанить' : 'Забанить', u.banned ? 'secondary small' : 'danger small', () => {
+        if (u.banned || confirm(`Забанить ${u.name}? Его выкинет отовсюду, войти он больше не сможет.`)) {
+          sendWs({ type: 'ban', userId: u.id, banned: !u.banned });
+        }
+      });
+    }
+    add('Сбросить пароль', 'link', () => {
+      if (confirm(`Сбросить пароль ${u.name}? Я придумаю новый, его нужно будет передать.`)) sendWs({ type: 'reset-password', userId: u.id });
+    });
+    userList.append(li);
+  }
+}
+
+// Ссылку вставили в уже открытую вкладку: страница не перезагружается, меняется только #.
+window.addEventListener('hashchange', () => {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const invite = params.get('invite');
+  const room = params.get('r');
+  if (invite && !me) {
+    inviteToken = invite;
+    checkInvite();
+  } else if (room && me && room !== currentRoom?.id && rooms.some((r) => r.id === room)) {
+    joinRoom(room);
+  }
+});
+
+$('#admin-btn').onclick = () => {
+  $('#admin-notice').hidden = true;
+  sendWs({ type: 'admin-get' });
+  renderAdmin();
+  $('#admin').showModal();
+};
+$('#inv-create').onclick = () => sendWs({ type: 'invite-create', maxUses: $('#inv-uses').value, days: $('#inv-days').value });
 
 // ---------- Старт ----------
 (async () => {
-  $('#join-name').value = store.get('name', '');
-  $('#join-room').value = decodeURIComponent(location.hash.slice(1)).replace(/^room=/, '');
   $('#join-bubble').textContent = pick(SAY.greet);
-  paintAvatar($('#join-avatar'), $('#join-name').value || '?', myAvatar);
-  if ($('#join-name').value && $('#join-room').value) $('#join-password').focus();
+  $('#side-settings').innerHTML = ICONS.gear;
+  syncAuthForm();
   if (desktop) {
     $('#change-server').hidden = false;
     $('#change-server').onclick = () => desktop.changeServer();
     syncDesktopPtt();
   } else if (/Windows/.test(navigator.userAgent)) {
     $('#download-link').hidden = false;
+    $('#lobby-download').hidden = false;
     const openApp = $('#open-app-link');
     openApp.hidden = false;
-    const updateOpenApp = () => (openApp.href = `discordio://${location.host}/#${$('#join-room').value.trim()}`);
-    updateOpenApp();
-    $('#join-room').addEventListener('input', updateOpenApp);
+    openApp.href = `discordio://${location.host}/${autoJoin ? '#r=' + autoJoin : ''}`;
   }
   try {
     config = await (await fetch('/config.json')).json();
   } catch {}
-  if (!window.isSecureContext) {
-    const err = $('#join-error');
-    err.textContent = 'Страница открыта не по https: браузер не даст микрофон. Используй https-ссылку туннеля или localhost.';
-    err.hidden = false;
-  }
+  const insecure = window.isSecureContext
+    ? ''
+    : 'Страница открыта не по https: браузер не даст микрофон. Открой сайт по https-ссылке или через localhost.';
+  if (inviteToken) await checkInvite();
+  try {
+    const res = await fetch('/api/me');
+    if (res.ok) {
+      showApp((await res.json()).user);
+      if (insecure) warn(insecure);
+      return;
+    }
+  } catch {}
+  showAuth(insecure);
 })();
 
 // Для автотестов.

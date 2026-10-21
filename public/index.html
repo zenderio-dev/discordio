@@ -11,32 +11,32 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <!-- Экран входа -->
-  <section id="join" class="screen">
+  <!-- Вход и регистрация -->
+  <section id="auth" class="screen">
     <div class="join-wrap">
       <div class="mascot-box">
-        <img src="/img/mascot.svg" alt="" class="mascot" width="180" height="180">
+        <img src="/img/mascot.webp" alt="" class="mascot" width="180" height="180">
         <div class="bubble" id="join-bubble"></div>
       </div>
-      <form id="join-form" class="card join-card" autocomplete="on">
+      <form id="auth-form" class="card join-card" autocomplete="on">
         <h1>discordio <span class="heart">♥</span></h1>
-        <div class="join-profile">
-          <button type="button" class="avatar-pick" id="join-avatar" title="Выбрать аватарку"></button>
-          <label class="grow">Твоё имя
-            <input id="join-name" name="nickname" maxlength="32" required autocomplete="nickname">
-          </label>
+        <div class="segmented tabs" id="auth-tabs">
+          <label><input type="radio" name="auth-mode" value="login" checked> Вход</label>
+          <label id="auth-register-tab" hidden><input type="radio" name="auth-mode" value="register"> Регистрация</label>
         </div>
-        <label>Комната
-          <input id="join-room" name="room" maxlength="64" required pattern="[A-Za-z0-9_\-]+" title="Латиница, цифры, - и _">
+        <label>Логин
+          <input id="auth-login" name="username" maxlength="24" required autocomplete="username" pattern="[A-Za-z0-9_.\-]{3,24}" title="3–24 символа: латиница, цифры, точка, - и _">
+        </label>
+        <p id="auth-invite" class="hint invite-hint" hidden></p>
+        <label id="auth-name-row" hidden>Имя, которое увидят друзья
+          <input id="auth-name" name="nickname" maxlength="32" autocomplete="nickname" placeholder="Можно по-русски">
         </label>
         <label>Пароль
-          <input id="join-password" name="password" type="password" minlength="4" required autocomplete="current-password">
+          <input id="auth-password" name="password" type="password" minlength="6" required autocomplete="current-password">
         </label>
-        <p class="hint">Если комнаты ещё нет, она создастся с этим паролем.</p>
-        <p id="join-error" class="error" hidden></p>
-        <button type="submit" class="primary" id="join-btn">Войти</button>
+        <p id="auth-error" class="error" hidden></p>
+        <button type="submit" class="primary" id="auth-btn">Войти</button>
         <div class="join-links">
-          <button type="button" id="join-settings" class="link">Настроить микрофон</button>
           <a id="download-link" class="link" href="/download" hidden>Приложение для Windows</a>
           <a id="open-app-link" class="link" hidden>Открыть в приложении</a>
           <button type="button" id="change-server" class="link" hidden>Сменить сервер</button>
@@ -45,43 +45,74 @@
     </div>
   </section>
 
-  <!-- Комната -->
-  <section id="room" class="screen" hidden>
-    <header class="topbar">
-      <div class="room-title"><span class="dot"></span><span id="room-name"></span></div>
-      <div class="topbar-actions">
-        <button id="copy-link" class="ghost" title="Скопировать ссылку на комнату">Пригласить</button>
-        <button id="toggle-chat" class="ghost" title="Чат">Чат <span id="unread" class="badge" hidden></span></button>
+  <!-- Приложение: список комнат слева, комната справа -->
+  <section id="app" class="screen app" hidden>
+    <aside class="sidebar">
+      <div class="side-head">
+        <img src="/img/mascot-face.webp" alt="" width="34" height="34">
+        <b>discordio <span class="heart">♥</span></b>
       </div>
-    </header>
-
-    <main class="layout">
-      <div class="main-col">
-        <div id="stage" class="stage" hidden></div>
-        <div id="tiles" class="tiles"></div>
-        <div id="alone" class="alone" hidden>
-          <img src="/img/mascot.svg" alt="" width="120" height="120">
-          <p>Ты тут один... Н-не грусти, я тоже тут. Случайно!<br>Нажми «Пригласить» и скинь друзьям ссылку.</p>
-        </div>
+      <div class="rooms-head">
+        <span>Комнаты</span>
+        <button id="add-room" class="mini" title="Новая комната">+</button>
       </div>
-      <aside id="chat" class="chat">
-        <div id="messages" class="messages"></div>
-        <form id="chat-form" class="chat-form">
-          <textarea id="chat-input" rows="1" maxlength="2000" placeholder="Напиши что-нибудь… если хочешь"></textarea>
-          <button type="submit" class="primary small" aria-label="Отправить">♥</button>
-        </form>
-      </aside>
-    </main>
+      <ul id="room-list" class="room-list"></ul>
+      <div class="me-panel">
+        <div class="avatar" id="me-avatar"></div>
+        <div class="me-text"><b id="me-name"></b><span id="me-login"></span></div>
+        <button id="admin-btn" class="mini" title="Админка" hidden>🛡</button>
+        <button id="side-settings" class="mini" title="Настройки"></button>
+        <button id="logout" class="mini" title="Выйти из аккаунта">⏻</button>
+      </div>
+    </aside>
 
-    <footer class="controls">
-      <button id="btn-mic" class="ctrl" title="Микрофон (Ctrl+Shift+M)"></button>
-      <button id="btn-deafen" class="ctrl" title="Выключить звук (Ctrl+Shift+D)"></button>
-      <button id="btn-ptt" class="ctrl ptt" hidden title="Зажми, чтобы говорить">Говорить</button>
-      <button id="btn-cam" class="ctrl" title="Камера"></button>
-      <button id="btn-share" class="ctrl" title="Демонстрация экрана"></button>
-      <button id="btn-settings" class="ctrl" title="Настройки"></button>
-      <button id="btn-leave" class="ctrl danger" title="Выйти"></button>
-    </footer>
+    <div class="room-area">
+      <div id="lobby" class="lobby">
+        <button id="lobby-menu" class="ghost menu-btn" title="Комнаты">☰ Комнаты</button>
+        <img src="/img/mascot.webp" alt="" width="150" height="150" class="mascot">
+        <p id="lobby-text"></p>
+        <a id="lobby-download" class="link" href="/download" hidden>Скачать приложение для Windows</a>
+      </div>
+
+      <div id="room" class="room" hidden>
+        <header class="topbar">
+          <button id="room-menu" class="ghost menu-btn" title="Комнаты">☰</button>
+          <div class="room-title"><span class="dot"></span><span id="room-name"></span></div>
+          <div class="topbar-actions">
+            <button id="copy-link" class="ghost" title="Скопировать ссылку на комнату">Пригласить</button>
+            <button id="toggle-chat" class="ghost" title="Чат">Чат <span id="unread" class="badge" hidden></span></button>
+          </div>
+        </header>
+
+        <main class="layout">
+          <div class="main-col">
+            <div id="stage" class="stage" hidden></div>
+            <div id="tiles" class="tiles"></div>
+            <div id="alone" class="alone" hidden>
+              <img src="/img/mascot.webp" alt="" width="120" height="120">
+              <p>Ты тут один... Н-не грусти, я тоже тут. Случайно!<br>Нажми «Пригласить» и скинь друзьям ссылку.</p>
+            </div>
+          </div>
+          <aside id="chat" class="chat">
+            <div id="messages" class="messages"></div>
+            <form id="chat-form" class="chat-form">
+              <textarea id="chat-input" rows="1" maxlength="2000" placeholder="Напиши что-нибудь… если хочешь"></textarea>
+              <button type="submit" class="primary small" aria-label="Отправить">♥</button>
+            </form>
+          </aside>
+        </main>
+
+        <footer class="controls">
+          <button id="btn-mic" class="ctrl" title="Микрофон (Ctrl+Shift+M)"></button>
+          <button id="btn-deafen" class="ctrl" title="Выключить звук (Ctrl+Shift+D)"></button>
+          <button id="btn-ptt" class="ctrl ptt" hidden title="Зажми, чтобы говорить">Говорить</button>
+          <button id="btn-cam" class="ctrl" title="Камера"></button>
+          <button id="btn-share" class="ctrl" title="Демонстрация экрана"></button>
+          <button id="btn-settings" class="ctrl" title="Настройки"></button>
+          <button id="btn-leave" class="ctrl danger" title="Выйти из комнаты"></button>
+        </footer>
+      </div>
+    </div>
   </section>
 
   <div id="toasts" class="toasts"></div>
@@ -103,6 +134,9 @@
           <p class="hint">Картинка ужмётся до 128×128.</p>
         </div>
       </div>
+      <label>Имя, которое видят друзья
+        <input id="s-name" maxlength="32">
+      </label>
 
       <h3>Устройства</h3>
       <label>Микрофон
@@ -182,7 +216,54 @@
       <button type="button" class="ghost" id="picker-cancel" aria-label="Отмена">✕</button>
     </div>
     <div id="picker-list" class="picker-list"></div>
-    <label class="check picker-audio"><input id="picker-audio" type="checkbox"> Передавать звук компьютера (друзья услышат и себя, включай для игр и видео)</label>
+    <label class="check picker-audio"><input id="picker-audio" type="checkbox"> Передавать звук компьютера (голоса друзей и звук discordio в стрим не попадут)</label>
+  </dialog>
+
+  <!-- Админка -->
+  <dialog id="admin" class="card settings">
+    <form method="dialog" class="settings-head">
+      <h2>Админка</h2>
+      <button class="ghost" aria-label="Закрыть">✕</button>
+    </form>
+    <div class="settings-body">
+      <div id="admin-notice" class="admin-notice" hidden></div>
+      <h3>Приглашения</h3>
+      <p class="hint">Зарегистрироваться можно только по ссылке-приглашению. Создай ссылку и скинь другу.</p>
+      <div class="invite-new">
+        <label>Сколько человек
+          <select id="inv-uses">
+            <option value="1">1</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="0">без ограничений</option>
+          </select>
+        </label>
+        <label>Действует
+          <select id="inv-days">
+            <option value="1">1 день</option>
+            <option value="7" selected>7 дней</option>
+            <option value="30">30 дней</option>
+            <option value="0">бессрочно</option>
+          </select>
+        </label>
+        <button type="button" class="primary small" id="inv-create">Создать ссылку</button>
+      </div>
+      <ul id="inv-list" class="admin-list"></ul>
+      <h3>Пользователи</h3>
+      <ul id="user-list" class="admin-list"></ul>
+    </div>
+  </dialog>
+
+  <!-- Название комнаты -->
+  <dialog id="room-dialog" class="card small-dialog">
+    <form method="dialog">
+      <h2 id="room-dialog-title"></h2>
+      <input id="room-dialog-name" maxlength="32" required autocomplete="off" placeholder="Например: Катка">
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate class="ghost">Отмена</button>
+        <button value="ok" class="primary">Сохранить</button>
+      </div>
+    </form>
   </dialog>
 
   <input type="file" id="avatar-file" accept="image/*" hidden>
@@ -197,6 +278,7 @@
         <input type="range" min="0" max="100" step="1" title="Громкость участника">
         <button type="button" class="mini mute-for-me" title="Заглушить для себя"></button>
         <button type="button" class="mini poke" title="Тыкнуть">👉</button>
+        <button type="button" class="mini kick" title="Выгнать из комнаты" hidden>🚪</button>
       </div>
     </div>
   </template>

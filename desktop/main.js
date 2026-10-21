@@ -139,7 +139,11 @@ function setupPermissions() {
       });
       const source = choice && sources.find((s) => s.id === choice.id);
       if (!source) return callback({});
-      callback({ video: source, audio: choice.audio && process.platform === 'win32' ? 'loopback' : undefined });
+      // Ключ audio передаём только со значением: на audio: undefined Electron бросает
+      // исключение, и демонстрация без звука не запускалась.
+      const result = { video: source };
+      if (choice.audio && process.platform === 'win32') result.audio = 'loopback';
+      callback(result);
     } catch (e) {
       console.error(e);
       callback({});

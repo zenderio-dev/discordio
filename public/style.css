@@ -86,7 +86,7 @@ label.check { display: flex; gap: 8px; align-items: center; color: var(--text); 
 
 /* Вход */
 .screen { height: 100%; }
-#join { display: grid; place-items: center; padding: 16px; overflow: auto; }
+#auth { display: grid; place-items: center; padding: 16px; overflow: auto; }
 .join-wrap { display: flex; flex-direction: column; align-items: center; width: min(400px, 100%); }
 .mascot-box { position: relative; display: flex; align-items: flex-end; gap: 4px; margin-bottom: -18px; z-index: 1; }
 .mascot { width: 130px; height: 130px; animation: bob 3s ease-in-out infinite; }
@@ -107,9 +107,62 @@ label.check { display: flex; gap: 8px; align-items: center; color: var(--text); 
 .grow { flex: 1; }
 .join-card .primary { margin-top: 8px; padding: 11px; font-size: 16px; }
 .join-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; }
+.tabs { justify-content: center; margin: 14px 0 4px; }
+.tabs label { flex: 1; text-align: center; }
+
+/* Приложение: комнаты слева, комната справа */
+.app { display: flex; }
+.sidebar {
+  width: 260px; flex: none; display: flex; flex-direction: column; background: var(--panel);
+  border-right: 2px solid var(--line); min-height: 0;
+}
+.side-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; color: var(--accent); font-size: 18px; border-bottom: 2px solid var(--line); }
+.rooms-head {
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 4px;
+  font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+}
+.rooms-head .mini { font-size: 18px; color: var(--accent-2); }
+.room-list, .member-list { list-style: none; margin: 0; padding: 0; }
+.room-list { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+.room-row { display: flex; align-items: center; gap: 2px; border-radius: 12px; }
+.room-row:hover { background: var(--panel-2); }
+.room-btn {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  background: none; border-radius: 12px; text-align: left; color: var(--text);
+}
+.room-btn svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.room-btn span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-btn small { color: var(--muted); font-weight: 400; }
+.room-row .mini { width: 26px; height: 26px; font-size: 12px; background: none; color: var(--muted); visibility: hidden; }
+.room-row:hover .mini, .room-row:focus-within .mini { visibility: visible; }
+.room-row .mini:hover { background: var(--accent-soft); color: var(--accent-2); }
+.room-item.current .room-row { background: var(--accent-soft); }
+.room-item.current .room-btn, .room-item.current .room-btn svg { color: var(--accent-2); }
+.member-list { padding: 2px 0 6px 30px; }
+.member-list li { display: flex; align-items: center; gap: 8px; padding: 3px 6px; font-size: 13.5px; }
+.member-list .avatar { width: 22px; height: 22px; font-size: 11px; }
+.member-list span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-list i { display: flex; align-items: center; gap: 3px; color: var(--red); font-style: normal; }
+.member-list i svg { width: 14px; height: 14px; }
+.live { background: var(--red); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 6px; text-transform: uppercase; }
+.me-panel { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 2px solid var(--line); background: var(--panel-2); }
+.me-panel .avatar { width: 36px; height: 36px; font-size: 15px; }
+.me-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.me-text b, .me-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-text span { font-size: 12px; color: var(--muted); }
+.me-panel .mini { background: var(--panel); color: var(--accent-2); }
+
+.room-area { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lobby { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; color: var(--muted); }
+.lobby p { font-size: 17px; max-width: 360px; }
+.menu-btn { display: none; }
+
+dialog.small-dialog { width: min(380px, calc(100vw - 32px)); padding: 20px; }
+.small-dialog h2 { margin: 0 0 12px; font-size: 18px; color: var(--accent-2); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
 /* Комната */
-#room { display: flex; flex-direction: column; }
+.room { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .topbar {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 16px; background: var(--panel); border-bottom: 2px solid var(--line);
@@ -122,16 +175,44 @@ label.check { display: flex; gap: 8px; align-items: center; color: var(--text); 
 .layout { flex: 1; display: flex; min-height: 0; }
 .main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 16px; gap: 16px; overflow: auto; }
 
-.stage { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.stage { display: flex; flex-direction: column; gap: 10px; }
 .screen-view {
   max-height: 62vh; position: relative; background: #000; border-radius: var(--radius); overflow: hidden;
-  aspect-ratio: 16 / 9; border: 3px solid var(--accent-soft);
+  aspect-ratio: 16 / 9; border: 3px solid var(--accent-soft); background-size: contain; background-position: center; background-repeat: no-repeat;
+}
+.screen-view.loading video { opacity: 0; }
+.screen-view.loading::after {
+  content: "Подключаюсь к стриму…"; position: absolute; inset: 0; display: grid; place-items: center;
+  color: #fff; font-weight: 800; background: #0008;
 }
 .screen-view video { width: 100%; height: 100%; object-fit: contain; display: block; }
 .screen-view .label {
   position: absolute; left: 8px; bottom: 8px; background: #000a; color: #fff; padding: 3px 10px; border-radius: 999px; font-size: 13px;
 }
-.screen-view .fs { position: absolute; right: 8px; bottom: 8px; background: #000a; color: #fff; padding: 4px 10px; font-size: 13px; }
+.view-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; z-index: 1; }
+.view-actions button { background: #000a; color: #fff; padding: 4px 10px; font-size: 13px; }
+.view-actions .unwatch:hover { background: var(--red); }
+
+.stream-cards { display: flex; gap: 10px; flex-wrap: wrap; }
+.stream-card {
+  position: relative; width: 240px; aspect-ratio: 16 / 9; padding: 0; overflow: hidden;
+  border-radius: 14px; background: #000; border: 3px solid var(--accent-soft); font-weight: 400;
+}
+.stream-card:hover { border-color: var(--accent); }
+.stream-card img, .stream-card video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.stream-card.no-preview::before {
+  content: "Превью скоро будет…"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff9; font-size: 13px;
+}
+.stream-card .live { position: absolute; top: 6px; left: 6px; }
+.stream-card .label {
+  position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); background: #000a; color: #fff;
+  padding: 2px 8px; border-radius: 999px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stream-card .watch {
+  position: absolute; inset: 0; display: grid; place-items: center; background: #0007; color: #fff;
+  font-weight: 800; opacity: 0; transition: opacity .12s;
+}
+.stream-card:hover .watch, .stream-card:focus-visible .watch { opacity: 1; }
 
 .tiles { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); align-content: start; }
 .tile {
@@ -234,10 +315,15 @@ dialog.picker { width: min(760px, calc(100vw - 32px)); }
 .picker-audio { padding: 0 20px 16px; }
 
 @media (max-width: 760px) {
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: min(300px, 86vw); z-index: 10; box-shadow: var(--shadow); transform: translateX(-102%); transition: transform .2s; }
+  .app.side-open .sidebar { transform: none; }
+  .menu-btn { display: inline-block; }
+  .lobby .menu-btn { position: absolute; top: 12px; left: 12px; }
+  .room-row .mini { visibility: visible; }
   .chat { position: fixed; inset: 56px 0 74px 0; width: auto; z-index: 5; }
   .layout:not(.chat-open) .chat { display: none; }
   .tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-  .stage { grid-template-columns: 1fr; }
+  .stream-card { width: calc(50% - 5px); }
   .ctrl { width: 44px; }
   .mascot { width: 100px; height: 100px; }
 }
@@ -247,3 +333,19 @@ dialog.picker { width: min(760px, calc(100vw - 32px)); }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* Админка */
+button.danger { background: var(--red); color: #fff; }
+.muted { color: var(--muted); font-size: 13px; }
+.invite-hint { text-align: center; margin: 8px 0 0; }
+.invite-new { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.invite-new label { flex: 1; min-width: 130px; margin: 0; }
+.invite-new button { margin-bottom: 2px; }
+.admin-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.admin-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+.admin-list .grow { min-width: 0; flex: 1 1 220px; }
+.admin-list code { display: block; font-size: 12px; word-break: break-all; color: var(--text); }
+.admin-list small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.admin-list li.banned b { text-decoration: line-through; color: var(--muted); }
+.admin-notice { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 14px; padding: 12px; border-radius: 12px; background: var(--accent-soft); }
+.admin-notice code { font-size: 18px; user-select: all; word-break: break-all; }

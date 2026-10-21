@@ -1,7 +1,7 @@
 {
   "name": "discordio-desktop",
   "productName": "discordio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "discordio для Windows",
   "author": "zenderio-dev",
   "license": "MIT",
@@ -26,7 +26,7 @@
       "main.js",
       "preload.js",
       "connect.html",
-      "mascot.svg",
+      "mascot.webp",
       "icon.png",
       "!node_modules/uiohook-napi/prebuilds/{darwin-*,linux-*,win32-arm64}/**",
       "!node_modules/uiohook-napi/{src,libuiohook,binding.gyp}/**"
