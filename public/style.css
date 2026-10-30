@@ -259,6 +259,16 @@ dialog.small-dialog { width: min(380px, calc(100vw - 32px)); padding: 20px; }
 .chat-form { display: flex; gap: 8px; padding: 10px; border-top: 2px solid var(--line); align-items: flex-end; }
 .chat-form textarea { resize: none; max-height: 120px; }
 .chat-form button { width: 42px; height: 42px; padding: 0; flex: none; }
+.msg .text:empty { display: none; }
+.msg-image { display: block; margin-top: 4px; line-height: 0; }
+.msg-image img { max-width: 100%; max-height: 260px; min-height: 40px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel-2); cursor: zoom-in; }
+.chat-attach { display: flex; align-items: center; gap: 8px; padding: 8px 10px 0; border-top: 2px solid var(--line); }
+.chat-attach img { width: 48px; height: 48px; object-fit: cover; border-radius: 10px; border: 2px solid var(--line); }
+.chat-attach .muted { flex: 1; min-width: 0; }
+.chat-attach.uploading img { opacity: .5; }
+.lightbox { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(0, 0, 0, .8); cursor: zoom-out; padding: 16px; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 12px; box-shadow: var(--shadow); }
+.chat.drop-target { outline: 3px dashed var(--accent); outline-offset: -6px; }
 
 .controls {
   display: flex; justify-content: center; gap: 10px; padding: 12px; background: var(--panel);

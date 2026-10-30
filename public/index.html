@@ -95,7 +95,14 @@
           </div>
           <aside id="chat" class="chat">
             <div id="messages" class="messages"></div>
+            <div id="chat-attach" class="chat-attach" hidden>
+              <img id="chat-attach-img" alt="">
+              <span id="chat-attach-status" class="muted"></span>
+              <button type="button" id="chat-attach-clear" class="ghost small" aria-label="Убрать картинку">✕</button>
+            </div>
             <form id="chat-form" class="chat-form">
+              <input id="chat-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+              <button type="button" id="chat-pick" class="ghost" title="Прикрепить картинку (или вставь из буфера, или перетащи)" aria-label="Прикрепить картинку">📎</button>
               <textarea id="chat-input" rows="1" maxlength="2000" placeholder="Напиши что-нибудь… если хочешь"></textarea>
               <button type="submit" class="primary small" aria-label="Отправить">♥</button>
             </form>
@@ -206,6 +213,13 @@
       <h3>Разное</h3>
       <label class="check"><input id="s-notify" type="checkbox"> Уведомления о сообщениях, когда окно свёрнуто</label>
       <label class="check"><input id="s-sounds" type="checkbox"> Звуки входа, выхода и «тычков»</label>
+      <label class="check"><input id="s-voice" type="checkbox"> Озвучка цундерочки вместо звуков</label>
+      <div id="s-voice-block">
+        <label>Громкость озвучки <output id="s-voice-volume-val"></output>
+          <input id="s-voice-volume" type="range" min="0" max="100" step="5">
+        </label>
+        <p class="hint">Голос: VOICEVOX:四国めたん (Сикоку Метан).</p>
+      </div>
     </div>
   </dialog>
 

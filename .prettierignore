@@ -1,0 +1,6 @@
+node_modules/
+desktop/node_modules/
+desktop/dist/
+package-lock.json
+desktop/package-lock.json
+data/

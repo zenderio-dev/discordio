@@ -6,7 +6,12 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "lint": "eslint server.js src public/js desktop/main.js desktop/src desktop/preload.js test scripts eslint.config.js",
+    "test": "node --experimental-vm-modules --test test/server.test.js test/client.test.js test/audio.test.js test/desktop.test.js",
+    "test:electron": "node scripts/test-electron.js",
+    "check": "npm run lint && npm test",
+    "format:check": "prettier --check server.js src public/js desktop/main.js desktop/src test scripts eslint.config.js"
   },
   "engines": {
     "node": ">=18"
@@ -16,5 +21,11 @@
     "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "express": "^4.22.3",
     "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "jsdom": "^26.1.0",
+    "prettier": "^3.9.10"
   }
 }
